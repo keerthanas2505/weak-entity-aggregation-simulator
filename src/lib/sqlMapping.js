@@ -113,7 +113,8 @@ function aggregationMapping(f) {
     `);`,
     ``,
     comment([
-      `2) The M:N relationship ${f.relationship} becomes its OWN table (mapping rule for M:N).`,
+      `2) The aggregated relationship ${f.relationship} maps to its OWN table - the standard mapping rule for an M:N relationship (the classic aggregation case).`,
+      `   (For a 1:N base relationship a single FK on the many side would suffice, but a separate table is still CORRECT SQL - its composite key additionally enforces at most one row per participant pair.)`,
       `   Primary key = the pair of participant foreign keys.`,
       `   Relationship attributes (${f.relAttrs || "none"}) live HERE — not on the entities.`
     ]),
@@ -137,6 +138,13 @@ function aggregationMapping(f) {
     `  Agg_E1_ID ${sqlType("id")} NOT NULL,`,
     `  Agg_E2_ID ${sqlType("id")} NOT NULL,`,
     `  FOREIGN KEY (Agg_E1_ID, Agg_E2_ID) REFERENCES ${relTable}(E1_ID, E2_ID)`,
+    comment([
+      "Note: this mapping keeps the aggregation visible in SQL via a composite FK to the",
+      "assignment pair. If the base relationship were 1:N, a minimal mapping would",
+      "instead put a single FK on the many side - both are accepted practice; the",
+      "explicit form is shown because it preserves the pair-as-a-whole semantics."
+    ]),
+
     `);`
   ].join("\n");
 
@@ -144,13 +152,13 @@ function aggregationMapping(f) {
     `INSERT INTO ${e1} (E1_ID, Name) VALUES (1, '${f.entity1} A'), (2, '${f.entity1} B');`,
     `INSERT INTO ${e2} (E2_ID, Name) VALUES (10, '${f.entity2} X'), (20, '${f.entity2} Y');`,
     `INSERT INTO ${relTable} (E1_ID, E2_ID${relAttrs.length ? ", " + relAttrs.map(ident).join(", ") : ""})`,
-    `VALUES (1, 10${relAttrs.length ? ", " + relAttrs.map(() => "NULL").join(", ") : ""}), (1, 20);`,
+    `VALUES${relAttrs.length ? ` (1, 10, ${relAttrs.map(() => "NULL").join(", ")}), (1, 20, ${relAttrs.map(() => "NULL").join(", ")});` : " (1, 10), (1, 20);"}`,
     `-- ${f.higherRelationship} targets the whole assignment (1, 10) via aggregation:`,
     `INSERT INTO ${higher} (M_ID, Name, Agg_E1_ID, Agg_E2_ID) VALUES (100, '${f.higherEntity} 1', 1, 10);`
   ].join("\n");
 
   const notes = [
-    `Because ${f.relationship} is conceptually M:N, it cannot be absorbed into either entity — it maps to its own table ${relTable} keyed by (E1_ID, E2_ID).`,
+    `The aggregated relationship ${f.relationship} maps to its own table ${relTable} keyed by (E1_ID, E2_ID) - the standard rule for an M:N relationship. For a 1:N base relationship an FK on the many side would also be valid; the explicit table keeps the pair-as-a-whole semantics.`,
     `Aggregation in SQL = a COMPOSITE FOREIGN KEY. ${f.higherEntity}.${f.higherRelationship} references ${relTable}(E1_ID, E2_ID), so supervision attaches to the whole (${f.entity1}, ${f.entity2}) assignment pair.`,
     `Without aggregation you could only relate ${f.higherEntity} to ${f.entity1} OR to ${f.entity2} separately — the composite FK is what preserves the "assignment as a whole" semantics.`,
     `Relationship attributes (${f.relAttrs || "none"}) belong to ${relTable}, matching the ER rule that attributes of a relationship live on the relationship.`

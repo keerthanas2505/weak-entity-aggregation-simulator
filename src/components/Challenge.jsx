@@ -58,9 +58,9 @@ const AGG_SCENARIOS = [
     answer: { entity1: "Driver", entity2: "Vehicle", relationship: "Drives", higherEntity: "Inspector", higherRelationship: "Audits" }
   },
   {
-    id: "a4", domain: "E-Commerce",
-    story: "A customer places an order; the placement event (Customer–Places–Order) has a date and total. A Sales Agent then PROCESSES that entire order event. The agent works on the order placement as a whole.",
-    answer: { entity1: "Customer", entity2: "Order", relationship: "Places", higherEntity: "Sales_Agent", higherRelationship: "Processes" }
+    id: "a4", domain: "Logistics",
+    story: "A factory sources parts from suppliers; each supply event (Supplier–Supplies–Part) records quantity and unit cost - many suppliers can supply many parts. A Logistics Coordinator then SHIPS that whole supply event to the production line. The coordinator ships the supply assignment as a whole - not the supplier alone and not the part alone.",
+    answer: { entity1: "Supplier", entity2: "Part", relationship: "Supplies", higherEntity: "Coordinator", higherRelationship: "Ships" }
   },
   {
     id: "a5", domain: "Software",

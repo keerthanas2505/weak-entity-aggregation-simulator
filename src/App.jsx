@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
 import SqlPanel from './components/SqlPanel.jsx';
 import Challenge from './components/Challenge.jsx';
+import Walkthrough from './components/Walkthrough.jsx';
 import { sqlMappingFor } from './lib/sqlMapping.js';
 import { buildReportSections, exportPDF, exportDocx, exportPNG, captureDiagram } from './components/download/report.js';
 
@@ -55,6 +56,12 @@ function validateWeakEntity(f) {
   if (f.participation !== "Total") {
     errors.push({ field: "participation", msg: "Weak Entity must have TOTAL participation in the identifying relationship.", why: "By definition, every instance of a weak entity MUST be associated with an owner instance (existence dependency). Partial participation would mean some weak-entity rows have no owner, which is conceptually invalid for a weak entity." });
   }
+  if (f.owner.trim() && f.weak.trim() && f.owner.trim().toLowerCase() === f.weak.trim().toLowerCase()) {
+    errors.push({ field: "weak", msg: "Owner and Weak Entity must have different names.", why: "They are two distinct entity sets: the owner is identified independently while the weak entity is identified through it. Giving both the same name makes the ER diagram and the generated composite key ambiguous." });
+  }
+  if (f.cardinality === "N:M") {
+    errors.push({ field: "cardinality", msg: "An identifying relationship cannot be N:M.", why: "Each weak entity instance must belong to exactly ONE owner so that the composite key (Owner PK + Partial Key) can identify it. With N:M a weak instance could relate to several owners, its partial key would repeat under each, and identification becomes impossible - identifying relationships are always 1:N (or 1:1) from owner to weak entity." });
+  }
   return errors;
 }
 
@@ -67,6 +74,15 @@ function validateAggregation(f) {
   if (!f.higherRelationship.trim()) errors.push({ field: "higherRelationship", msg: "Higher-Level Relationship is required.", why: "A new relationship is needed to connect the aggregated abstraction to another entity (e.g. Manager)." });
   if (f.entity1.trim() && f.entity2.trim() && f.entity1.trim().toLowerCase() === f.entity2.trim().toLowerCase()) {
     errors.push({ field: "entity2", msg: "Entity 1 and Entity 2 must be different entities.", why: "A relationship requires two distinct participating entity sets (self-relationships aside, which this simulator does not model)." });
+  }
+  const E1 = f.entity1.trim().toLowerCase(), E2 = f.entity2.trim().toLowerCase();
+  const RL = f.relationship.trim().toLowerCase(), HL = f.higherEntity.trim().toLowerCase();
+  const HR = f.higherRelationship.trim().toLowerCase();
+  if (RL && (RL === E1 || RL === E2 || RL === HL)) {
+    errors.push({ field: "relationship", msg: "Relationship name must be distinct from entity names.", why: "A relationship is not an entity - reusing an entity name for the relationship diamond creates ambiguity in the ER diagram and in the generated SQL mapping." });
+  }
+  if (HR && (HR === RL || HR === HL)) {
+    errors.push({ field: "higherRelationship", msg: "Higher-Level Relationship must be distinct from the base relationship and entity names.", why: "The higher-level relationship connects the aggregation to the higher-level entity - it is a different relationship from the one being aggregated, so it needs its own name." });
   }
   return errors;
 }
@@ -129,7 +145,8 @@ const QUIZ_QUESTIONS = [
   { q: "What does aggregation allow us to do in ER modeling?", options: ["Delete redundant entities", "Treat a relationship set (and its participating entities) as a higher-level entity", "Merge two unrelated entities", "Remove weak entities"], correct: 1, explain: "Aggregation abstracts an entity-relationship-entity combination into a single higher-level entity so it can participate in further relationships." },
   { q: "In the Employee–Works_On–Project aggregation example, why is aggregation needed for 'Managed_By'?", options: ["Because Employee and Project cannot have any relationship", "Because we need to relate the whole Works_On assignment (not just Employee or just Project) to a Manager", "Because Works_On has too many attributes", "Because Manager is a weak entity"], correct: 1, explain: "Manager oversees the assignment as a whole (the fact that a specific employee works on a specific project), so the Works_On relationship itself must be treated as an entity via aggregation." },
   { q: "Which of these is a discriminator / partial key example for a Dependent weak entity of Employee?", options: ["Emp_ID", "Dependent_Name", "Department", "Salary"], correct: 1, explain: "Dependent_Name distinguishes dependents belonging to the same employee — it is the partial key, while Emp_ID is the owner's primary key." },
-  { q: "What is the key structural difference between a weak entity and aggregation?", options: ["They are exactly the same concept", "Weak entity models existence-dependency of ONE entity on another; aggregation abstracts a RELATIONSHIP into an entity", "Aggregation is only used for weak entities", "Weak entities can never have attributes"], correct: 1, explain: "Weak entity handles identification dependency between two entities; aggregation is a modeling technique to let a relationship itself participate in another relationship." }
+  { q: "What is the key structural difference between a weak entity and aggregation?", options: ["They are exactly the same concept", "Weak entity models existence-dependency of ONE entity on another; aggregation abstracts a RELATIONSHIP into an entity", "Aggregation is only used for weak entities", "Weak entities can never have attributes"], correct: 1, explain: "Weak entity handles identification dependency between two entities; aggregation is a modeling technique to let a relationship itself participate in another relationship." },
+  { q: "Why can an identifying relationship between owner and weak entity not be N:M?", options: ["It can be N:M if both sides agree", "Because each weak instance must belong to exactly ONE owner for the composite key to identify it", "Because N:M relationships are always invalid in ER modeling", "Because weak entities cannot have relationships"], correct: 1, explain: "Identification requires the partial key to be scoped to a single owner. Under N:M a weak instance could relate to several owners, so (Owner PK + Partial Key) could no longer uniquely identify it - identifying relationships are always 1:N (or 1:1) from owner to weak entity." }
 ];
 
 /* ============================= RULE-BASED TUTOR ============================= */
@@ -686,7 +703,7 @@ function Simulator({ mode, setMode, weakForm, setWeakForm, aggForm, setAggForm, 
               <div className="row2">
                 <div className="field"><label>Cardinality</label>
                   <select value={weakForm.cardinality} onChange={e => update("cardinality", e.target.value)}>
-                    <option>1:N</option><option>1:1</option><option>N:M</option>
+                    <option>1:N</option><option>1:1</option><option value="N:M" disabled title="An identifying relationship cannot be N:M - each weak instance needs exactly one owner for identification.">N:M (not allowed)</option>
                   </select>
                 </div>
                 <div className="field"><label>Participation *</label>
@@ -940,7 +957,7 @@ function Tutor({ lastResult }) {
 
 /* ============================= HELP ============================= */
 
-function Help() {
+function Help({ onRestartTour }) {
   const steps = [
     ["Open the Simulator", "Go to the Simulator tab and choose Weak Entity or Aggregation mode using the tab switch at the top."],
     ["Fill in the inputs", "Enter entity names, keys, attributes and relationship names in the left Input panel. Required fields are marked with *."],
@@ -960,6 +977,11 @@ function Help() {
       </div>
       <div className="concept-card" style={{ marginTop: 14 }}>
         <h3>🚶 First-Time User Walkthrough</h3>
+        {onRestartTour && (
+          <button className="btn btn-outline" style={{ marginTop: 8 }} onClick={onRestartTour}>
+            ▶ Restart Guided Tour
+          </button>
+        )}
         <div className="help-steps">
           {steps.map((s, i) => (
             <div className="help-step" key={i}>
@@ -1245,10 +1267,16 @@ function App() {
   const [progress, setProgress] = useLocalStorage("wes_progress", { simCount: 0, validCount: 0, quizBest: 0, achievements: [] });
   const [pendingLoad, setPendingLoad] = useState(null);
   const [lastResult, setLastResult] = useState(null);
+  const [tour, setTour] = useLocalStorage("wes_tour_done", false);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  function onTourEvent(e) {
+    if (e && e.type === "goto") setPage(e.page);
+    else setTour(true);
+  }
 
   function onRunSim({ mode, valid, errors, form }) {
     const entry = { id: uid(), mode, valid, errors, form, time: nowStr() };
@@ -1280,10 +1308,11 @@ function App() {
         {page === "practice" && <Practice onLoad={onLoadExample} setPage={setPage} progress={progress} setProgress={setProgress} />}
         {page === "challenge" && <Challenge setPendingLoad={setPendingLoad} setPage={setPage} setProgress={setProgress} />}
         {page === "tutor" && <Tutor lastResult={lastResult} />}
-        {page === "help" && <Help />}
+        {page === "help" && <Help onRestartTour={() => setTour(false)} />}
         {page === "download" && <Download history={history} />}
         {page === "team" && <Team />}
       </div>
+      {!tour && <Walkthrough onClose={onTourEvent} />}
       <div className="footer">
         Weak Entity & Aggregation Simulator — DBMS Virtual Lab Digital Assignment · Built with React
         {progress.achievements.length > 0 && <div style={{ marginTop: 6 }}>🏅 {progress.achievements.join(" · ")}</div>}
