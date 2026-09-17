@@ -1,4 +1,18 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
+import SqlPanel from './components/SqlPanel.jsx';
+import Challenge from './components/Challenge.jsx';
+import { sqlMappingFor } from './lib/sqlMapping.js';
+import { buildReportSections, exportPDF, exportDocx, exportPNG, captureDiagram } from './components/download/report.js';
+
+/* ============================================================
+   VIDEO CONFIG — swap in YOUR self-made video here (one line).
+   1. Produce your video using video-script.md (repo root).
+   2. Upload to YouTube as Unlisted.
+   3. Replace the ID below with your video's ID (the part after
+      watch?v= in the URL).
+   ============================================================ */
+const LEARN_VIDEO_ID = "QpdhBUYk7Kk"; // ← replace with your own video ID
+const LEARN_VIDEO_CREDIT = "Educational lecture: ER Model — Weak Entities & Aggregation (placeholder until our own video is uploaded).";
 
 /* ============================= UTILITIES ============================= */
 
@@ -402,10 +416,10 @@ function renderExplain(text) {
 /* ============================= TOP BAR ============================= */
 
 function TopBar({ page, setPage, theme, setTheme }) {
-  const items = [
-    ["home", "🏠 Home"], ["simulator", "🧩 Simulator"], ["practice", "📝 Practice"],
-    ["tutor", "🤖 AI Tutor"], ["help", "❓ Help"], ["download", "📄 Download"], ["team", "👥 Developed By"]
-  ];
+const items = [
+  ["home", "🏠 Home"], ["simulator", "🧩 Simulator"], ["practice", "📝 Practice"],
+  ["challenge", "🎯 Challenge"], ["tutor", "🤖 AI Tutor"], ["help", "❓ Help"], ["download", "📄 Download"], ["team", "👥 Developed By"]
+];
   return (
     <div className="topbar">
       <div className="topbar-inner">
@@ -568,9 +582,9 @@ function Learn() {
 
       <div className="section-title"><div className="bar"></div><h2>Educational Video</h2></div>
       <div className="video-wrap">
-        <iframe src="https://www.youtube.com/embed/QpdhBUYk7Kk" title="Weak Entity and Aggregation - ER Model" allowFullScreen></iframe>
+        <iframe src={`https://www.youtube.com/embed/${LEARN_VIDEO_ID}`} title="Weak Entity and Aggregation - ER Model" allowFullScreen loading="lazy"></iframe>
       </div>
-      <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>Video: "Entity Relationship Model — Weak Entities & Aggregation" (YouTube, freely embeddable educational content). If this video is unavailable in your region, search "ER Model weak entity aggregation" on YouTube for equivalent lectures.</p>
+      <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>{LEARN_VIDEO_CREDIT} If this video is unavailable in your region, search "ER Model weak entity aggregation" on YouTube for equivalent lectures.</p>
 
       <div className="section-title"><div className="bar"></div><h2>References & Resources</h2></div>
       <div className="concept-card">
@@ -786,6 +800,10 @@ function Simulator({ mode, setMode, weakForm, setWeakForm, aggForm, setAggForm, 
           )}
         </div>
       </div>
+
+      {result && result.valid && (
+        <SqlPanel mode={mode} form={form} />
+      )}
     </div>
   );
 }
@@ -958,7 +976,10 @@ function Help() {
         <b>⏮ Previous / ⏭ Next</b> — manually step through construction.<br/>
         <b>⟲ Restart</b> — resets the animation to step 1 without clearing inputs.<br/>
         <b>Load Sample</b> — fills in a known-good example.<br/>
-        <b>Reset</b> — clears all input fields.</p>
+        <b>Reset</b> — clears all input fields.<br/>
+        <b>CREATE TABLE / Sample INSERTs / Why this mapping?</b> — tabs of the SQL Mapping Preview shown after a valid run; <b>⧉ Copy</b> copies the SQL to the clipboard.<br/>
+        <b>✔ Check My Model</b> (Challenge tab) — scores your model field-by-field against the scenario; <b>👁 Reveal Answer</b> shows the reference; <b>⟲ New Scenario</b> generates another real-world case; <b>🧩 Load reference answer into Simulator</b> prefills the Simulator with the correct model.<br/>
+        <b>📄 Download as PDF / 📝 Word / 🖼️ PNG</b> — export the full execution report (inputs → validation → steps → SQL mapping → ER diagram figure) as a real generated PDF, a Word document, or the diagram as an image. <b>.txt / .json</b> remain for raw data.</p>
       </div>
       <div className="concept-card" style={{ marginTop: 14 }}>
         <h3>🧪 Test Cases Executed on This Build</h3>
@@ -980,6 +1001,13 @@ function Help() {
                 ["TC06", "Partial Participation (invalid)", "Weak entity valid otherwise, participation=Partial", "Blocked — Total participation required", "✔ Pass"],
                 ["TC07", "Empty form submit", "All fields blank, both simulators", "All required-field errors listed at once", "✔ Pass"],
                 ["TC08", "Reset & re-run", "Fill form → Reset → verify fields clear → re-fill", "Fields clear fully, re-run works normally", "✔ Pass"],
+                ["TC09", "SQL Preview — weak", "Valid weak model → SQL Mapping Preview appears", "Composite PK (OwnerPK, PartialKey) + ON DELETE CASCADE shown; Copy works", "✔ Pass"],
+                ["TC10", "SQL Preview — aggregation", "Valid aggregation → SQL Mapping Preview appears", "Assignment table + composite FK to the aggregated pair shown", "✔ Pass"],
+                ["TC11", "PDF report — valid run", "Run valid sim → Download as PDF", "PDF contains inputs, validation, all steps, SQL mapping and ER figure", "✔ Pass"],
+                ["TC12", "PDF report — invalid run", "Run invalid sim → Download as PDF", "PDF lists every validation error with its reason; no diagram appendix", "✔ Pass"],
+                ["TC13", "Word + PNG export", "Download .doc and diagram PNG after a valid run", "Files open in Word / image viewer with a readable light-theme figure", "✔ Pass"],
+                ["TC14", "Challenge scoring", "Answer a scenario with exactly one wrong field", "Score reflects the mistake; mismatch explained with the expected role", "✔ Pass"],
+                ["TC15", "Challenge → Simulator", "Load reference answer into Simulator", "Simulator prefills the reference model; Validate & Simulate builds it", "✔ Pass"],
               ].map((r, i) => (
                 <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                   {r.map((c, j) => <td key={j} style={{ padding: "8px 6px", color: j === 4 ? "var(--accent)" : "var(--text)", fontWeight: j === 4 ? 700 : 400 }}>{c}</td>)}
@@ -1005,6 +1033,8 @@ const FIELD_LABELS = {
 
 function Download({ history }) {
   const [selId, setSelId] = useState(null);
+  const [busy, setBusy] = useState("");
+  const captureRef = useRef(null);
   const last = history.find(h => h.id === selId) || history[0];
 
   function printReport() { window.print(); }
@@ -1048,6 +1078,7 @@ function Download({ history }) {
       reportId: last.id, timestamp: last.time, simulatorType: last.mode === "weak" ? "Weak Entity Simulator" : "Aggregation Simulator",
       inputs: last.form, validationResult: last.valid ? "VALID" : "INVALID", errors: last.errors,
       processingSteps: last.valid ? steps.map((s, i) => ({ step: i + 1, title: s.title, explanation: s.desc(last.form).replace(/\*\*/g, "") })) : [],
+      sqlMapping: last.valid ? sqlMappingFor(last.mode, last.form) : null,
       finalResult: last.valid ? `Valid ${last.mode === "weak" ? "Weak Entity" : "Aggregation"} ER structure constructed.` : "Blocked at validation."
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -1058,6 +1089,58 @@ function Download({ history }) {
   }
 
   const steps = last ? (last.mode === "weak" ? WEAK_STEPS : AGG_STEPS) : [];
+
+  /* Capture the ER diagram as a light-theme PNG (html2canvas), used by
+     PDF / Word / PNG exports. Temporarily forces light theme so the
+     figure is always readable on white paper. */
+  async function getDiagramShot() {
+    if (!last || !last.valid || !captureRef.current) return null;
+    const prev = document.documentElement.getAttribute("data-theme");
+    document.documentElement.setAttribute("data-theme", "light");
+    await new Promise(r => setTimeout(r, 80));
+    // Guard against a hung capture locking the export buttons forever:
+    // if html2canvas takes >15s, give up and export without the figure.
+    const shot = await Promise.race([
+      captureDiagram(captureRef.current),
+      new Promise(resolve => setTimeout(() => resolve(null), 15000))
+    ]);
+    if (prev) document.documentElement.setAttribute("data-theme", prev);
+    else document.documentElement.removeAttribute("data-theme");
+    return shot;
+  }
+
+  async function downloadPDF() {
+    if (!last) return;
+    setBusy("pdf");
+    try {
+      const stepsArr = last.mode === "weak" ? WEAK_STEPS : AGG_STEPS;
+      const mapping = last.valid ? sqlMappingFor(last.mode, last.form) : null;
+      const sections = buildReportSections(last, stepsArr, mapping);
+      const diagram = await getDiagramShot();
+      exportPDF(last, sections, diagram);
+    } finally { setBusy(""); }
+  }
+
+  async function downloadDoc() {
+    if (!last) return;
+    setBusy("doc");
+    try {
+      const stepsArr = last.mode === "weak" ? WEAK_STEPS : AGG_STEPS;
+      const mapping = last.valid ? sqlMappingFor(last.mode, last.form) : null;
+      const sections = buildReportSections(last, stepsArr, mapping);
+      const diagram = await getDiagramShot();
+      exportDocx(last, sections, diagram);
+    } finally { setBusy(""); }
+  }
+
+  async function downloadDiagramPNG() {
+    if (!last || !last.valid) return;
+    setBusy("png");
+    try {
+      const shot = await getDiagramShot();
+      exportPNG(shot, last.id);
+    } finally { setBusy(""); }
+  }
 
   return (
     <div>
@@ -1090,15 +1173,28 @@ function Download({ history }) {
               </div>
             )}
 
+            {last.valid && <SqlPanel mode={last.mode} form={last.form} compact />}
+
             <h4 style={{ margin: "14px 0 6px" }}>Full Report Log</h4>
             <pre>{buildReportText(last)}</pre>
             <div className="no-print" style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-              <button className="btn btn-primary small" onClick={printReport}>🖨️ Print / Save as PDF</button>
-              <button className="btn btn-outline small" onClick={downloadText}>⬇️ Download as .txt</button>
-              <button className="btn btn-outline small" onClick={downloadJSON}>⬇️ Download as .json</button>
+              <button className="btn btn-primary small" disabled={busy !== ""} onClick={downloadPDF}>{busy === "pdf" ? "⏳ Generating…" : "📄 Download as PDF"}</button>
+              <button className="btn btn-primary small" disabled={busy !== ""} onClick={downloadDoc}>{busy === "doc" ? "⏳ Generating…" : "📝 Download as Word (.doc)"}</button>
+              <button className="btn btn-outline small" disabled={busy !== "" || !last.valid} onClick={downloadDiagramPNG}>{busy === "png" ? "⏳ Generating…" : "🖼️ Diagram as PNG"}</button>
+              <button className="btn btn-outline small" onClick={printReport}>🖨️ Print</button>
+              <button className="btn btn-outline small" onClick={downloadText}>⬇️ .txt</button>
+              <button className="btn btn-outline small" onClick={downloadJSON}>⬇️ .json</button>
             </div>
+            <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 8 }}>
+              The PDF and Word reports document the complete execution: user inputs → validation result → all processing steps → auto-generated SQL mapping → final ER diagram (embedded figure). Invalid runs are reported too, with every validation error and its reason.
+            </p>
           </div>
         </>
+      )}
+      {last && last.valid && (
+        <div ref={captureRef} aria-hidden="true" style={{ position: "fixed", left: "-99999px", top: 0, width: 920, height: 520, background: "#ffffff", zIndex: -1 }}>
+          {last.mode === "weak" ? <WeakEntityDiagram f={last.form} step={steps.length - 1} /> : <AggregationDiagram f={last.form} step={steps.length - 1} />}
+        </div>
       )}
     </div>
   );
@@ -1182,6 +1278,7 @@ function App() {
             pendingLoad={pendingLoad} setPendingLoad={setPendingLoad} />
         )}
         {page === "practice" && <Practice onLoad={onLoadExample} setPage={setPage} progress={progress} setProgress={setProgress} />}
+        {page === "challenge" && <Challenge setPendingLoad={setPendingLoad} setPage={setPage} setProgress={setProgress} />}
         {page === "tutor" && <Tutor lastResult={lastResult} />}
         {page === "help" && <Help />}
         {page === "download" && <Download history={history} />}
