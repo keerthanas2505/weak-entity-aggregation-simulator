@@ -17,6 +17,12 @@ const TOUR_STEPS = [
     page: "home",
   },
   {
+    icon: "👤",
+    title: "Sign in to save progress",
+    body: "Create a free account (or continue as guest). Your simulations, quiz scores, exam marks and achievements are saved under your name and restored every time you sign back in — the top bar shows who you are.",
+    page: "home",
+  },
+  {
     icon: "🧩",
     title: "The Simulator",
     body: "Pick Weak Entity or Aggregation mode, fill in entities, keys and relationships on the left (or click Load Sample), then press Validate & Simulate. The diagram animates through 8 construction steps.",
@@ -30,15 +36,9 @@ const TOUR_STEPS = [
   },
   {
     icon: "📝",
-    title: "Practice & Quiz",
-    body: "Curated valid and invalid cases you can load straight into the Simulator, plus a concept quiz that tracks your best score and unlocks achievements.",
+    title: "The Practice Hub",
+    body: "One page, five sections: curated Examples, an adaptive Quiz (you pick the difficulty and type how many questions you want — wrong answers get a hint, then the explanation, then the answer), an Exam Bank of real GATE/UGC-NET questions with solutions, the scenario Challenge, and endless AI-generated drills.",
     page: "practice",
-  },
-  {
-    icon: "🎯",
-    title: "Challenge Mode",
-    body: "The app describes a real-world scenario (library, hotel, banking…); you model it from scratch. Your answer is scored field-by-field with coaching hints, and a perfect score unlocks the Challenge Champion badge.",
-    page: "challenge",
   },
   {
     icon: "📘",
@@ -55,7 +55,7 @@ const TOUR_STEPS = [
   {
     icon: "🚀",
     title: "You're ready!",
-    body: "Tip: the 🌙 Night Mode toggle is top-right, and your progress & achievements are tracked as you go. Press Restart Tour anytime from the Help tab.",
+    body: "Tip: the 🌙 Night Mode toggle is top-right, your average quiz score is tracked on Home, and all progress & achievements are saved to your account. Press Restart Tour anytime from the Help tab.",
     page: "home",
   },
 ];

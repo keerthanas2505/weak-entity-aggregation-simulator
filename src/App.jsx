@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import SqlPanel from './components/SqlPanel.jsx';
-import Challenge from './components/Challenge.jsx';
 import Walkthrough from './components/Walkthrough.jsx';
+import LoginGate from './components/LoginGate.jsx';
+import Practice from './components/Practice.jsx';
+import Tutor from './components/Tutor.jsx';
 import { sqlMappingFor } from './lib/sqlMapping.js';
-import { buildReportSections, exportPDF, exportDocx, exportPNG, captureDiagram } from './components/download/report.js';
+import { buildReportSections, exportPDF, exportDocx, exportPNG, captureDiagram, FIELD_LABELS } from './components/download/report.js';
+import { WEAK_SAMPLE, AGG_SAMPLE } from './lib/samples.js';
+import { getSession, setSession, signOut as authSignOut } from './lib/auth.js';
 
 /* ============================================================
    VIDEO CONFIG — swap in YOUR self-made video here (one line).
@@ -37,6 +41,7 @@ function nowStr() {
 function uid() {
   return Math.random().toString(36).slice(2, 9);
 }
+const newId = uid; // alias — the Workspace-local user object is also named `user`, keep ids distinct
 
 /* ============================= VALIDATION ============================= */
 
@@ -46,13 +51,10 @@ function validateWeakEntity(f) {
   if (!f.weak.trim()) errors.push({ field: "weak", msg: "Weak Entity name is required.", why: "You must define the dependent entity being modeled." });
   if (!f.ownerPK.trim()) errors.push({ field: "ownerPK", msg: "Owner Primary Key is required.", why: "The weak entity's identifying key is formed by combining the owner's primary key with its own partial key — without the owner PK this composite key cannot be built." });
   if (!f.partialKey.trim()) errors.push({ field: "partialKey", msg: "Partial Key (discriminator) is required.", why: "A weak entity has no full primary key of its own; it needs a partial key to distinguish its instances within one owner." });
-  if (f.owner.trim() && f.weak.trim() && f.relationship.trim()) {
-    // relationship implicitly connects owner & weak entity in this simulator, but we still check it's named & distinct
-    if (f.relationship.trim().toLowerCase() === f.owner.trim().toLowerCase() || f.relationship.trim().toLowerCase() === f.weak.trim().toLowerCase()) {
-      errors.push({ field: "relationship", msg: "Identifying Relationship name must be distinct from entity names.", why: "The relationship diamond represents the identifying dependency, not an entity — reusing an entity's name creates ambiguity in the ER diagram." });
-    }
-  }
   if (!f.relationship.trim()) errors.push({ field: "relationship", msg: "Identifying Relationship is required.", why: "This relationship is what structurally connects the weak entity to its owner and must be shown as a double-diamond in the ER diagram." });
+  if (f.relationship.trim() && (f.relationship.trim().toLowerCase() === f.owner.trim().toLowerCase() || f.relationship.trim().toLowerCase() === f.weak.trim().toLowerCase())) {
+    errors.push({ field: "relationship", msg: "Identifying Relationship name must be distinct from entity names.", why: "The relationship diamond represents the identifying dependency, not an entity — reusing an entity's name creates ambiguity in the ER diagram." });
+  }
   if (f.participation !== "Total") {
     errors.push({ field: "participation", msg: "Weak Entity must have TOTAL participation in the identifying relationship.", why: "By definition, every instance of a weak entity MUST be associated with an owner instance (existence dependency). Partial participation would mean some weak-entity rows have no owner, which is conceptually invalid for a weak entity." });
   }
@@ -86,138 +88,6 @@ function validateAggregation(f) {
   }
   return errors;
 }
-
-/* ============================= SAMPLE / PRACTICE DATA ============================= */
-
-const WEAK_SAMPLE = {
-  owner: "Employee", ownerPK: "Emp_ID", ownerAttrs: "Name, Department",
-  weak: "Dependent", partialKey: "Dependent_Name", weakAttrs: "Age, Relationship_Type",
-  relationship: "Has_Dependent", cardinality: "1:N", participation: "Total"
-};
-
-const AGG_SAMPLE = {
-  entity1: "Employee", entity2: "Project", relationship: "Works_On",
-  relAttrs: "Hours_Per_Week, Role", higherEntity: "Manager", higherRelationship: "Supervises"
-};
-
-const PRACTICE_EXAMPLES = [
-  {
-    id: "p1", type: "weak", title: "Employee — Dependent (Valid)", valid: true,
-    desc: "Classic textbook weak entity: Dependent cannot be identified without knowing which Employee it belongs to.",
-    data: { ...WEAK_SAMPLE }
-  },
-  {
-    id: "p2", type: "weak", title: "Order — OrderItem (Valid)", valid: true,
-    desc: "OrderItem rows are only meaningful combined with their parent Order's key.",
-    data: { owner: "Order", ownerPK: "Order_ID", ownerAttrs: "Order_Date, Total", weak: "OrderItem", partialKey: "Line_No", weakAttrs: "Quantity, Unit_Price", relationship: "Contains_Item", cardinality: "1:N", participation: "Total" }
-  },
-  {
-    id: "p3", type: "weak", title: "Missing Partial Key (Invalid)", valid: false,
-    desc: "A weak entity is defined without a discriminator/partial key — this must be rejected.",
-    data: { owner: "Hotel", ownerPK: "Hotel_ID", ownerAttrs: "City", weak: "Room", partialKey: "", weakAttrs: "Room_Type", relationship: "Has_Room", cardinality: "1:N", participation: "Total" }
-  },
-  {
-    id: "p4", type: "weak", title: "Missing Owner Primary Key (Invalid)", valid: false,
-    desc: "Owner entity exists but has no declared primary key — the composite identifying key cannot be formed.",
-    data: { owner: "Building", ownerPK: "", ownerAttrs: "Address", weak: "Floor", partialKey: "Floor_No", weakAttrs: "Area_Sqft", relationship: "Has_Floor", cardinality: "1:N", participation: "Total" }
-  },
-  {
-    id: "p5", type: "weak", title: "Partial Participation (Invalid)", valid: false,
-    desc: "Participation is marked Partial instead of Total — violates the existence-dependency rule of weak entities.",
-    data: { owner: "Course", ownerPK: "Course_ID", ownerAttrs: "Title", weak: "Section", partialKey: "Section_No", weakAttrs: "Timing", relationship: "Has_Section", cardinality: "1:N", participation: "Partial" }
-  },
-  {
-    id: "p6", type: "agg", title: "Employee–Works_On–Project → Manager (Valid)", valid: true,
-    desc: "Standard aggregation example: abstracting an assignment relationship so a Manager can oversee it.",
-    data: { ...AGG_SAMPLE }
-  },
-  {
-    id: "p7", type: "agg", title: "Missing Relationship (Invalid)", valid: false,
-    desc: "Two entities are given but no relationship connects them — aggregation has nothing to abstract.",
-    data: { entity1: "Doctor", entity2: "Patient", relationship: "", relAttrs: "Date", higherEntity: "Treatment", higherRelationship: "Reviewed_By" }
-  }
-];
-
-const QUIZ_QUESTIONS = [
-  { q: "What uniquely identifies a weak entity instance?", options: ["Its own primary key", "The owner's primary key combined with its partial key", "Its partial key alone", "A randomly generated ID"], correct: 1, explain: "A weak entity has no independent primary key; identification requires the owner entity's primary key plus the weak entity's own partial (discriminator) key." },
-  { q: "What type of participation must a weak entity have in its identifying relationship?", options: ["Partial", "Optional", "Total", "None"], correct: 2, explain: "Weak entities are existence-dependent on their owner, so participation in the identifying relationship must always be Total." },
-  { q: "How is a weak entity represented in standard ER notation?", options: ["Single rectangle", "Double (bordered) rectangle", "Diamond", "Oval"], correct: 1, explain: "A weak entity is drawn as a double-outlined rectangle to visually distinguish it from a strong entity." },
-  { q: "What does aggregation allow us to do in ER modeling?", options: ["Delete redundant entities", "Treat a relationship set (and its participating entities) as a higher-level entity", "Merge two unrelated entities", "Remove weak entities"], correct: 1, explain: "Aggregation abstracts an entity-relationship-entity combination into a single higher-level entity so it can participate in further relationships." },
-  { q: "In the Employee–Works_On–Project aggregation example, why is aggregation needed for 'Managed_By'?", options: ["Because Employee and Project cannot have any relationship", "Because we need to relate the whole Works_On assignment (not just Employee or just Project) to a Manager", "Because Works_On has too many attributes", "Because Manager is a weak entity"], correct: 1, explain: "Manager oversees the assignment as a whole (the fact that a specific employee works on a specific project), so the Works_On relationship itself must be treated as an entity via aggregation." },
-  { q: "Which of these is a discriminator / partial key example for a Dependent weak entity of Employee?", options: ["Emp_ID", "Dependent_Name", "Department", "Salary"], correct: 1, explain: "Dependent_Name distinguishes dependents belonging to the same employee — it is the partial key, while Emp_ID is the owner's primary key." },
-  { q: "What is the key structural difference between a weak entity and aggregation?", options: ["They are exactly the same concept", "Weak entity models existence-dependency of ONE entity on another; aggregation abstracts a RELATIONSHIP into an entity", "Aggregation is only used for weak entities", "Weak entities can never have attributes"], correct: 1, explain: "Weak entity handles identification dependency between two entities; aggregation is a modeling technique to let a relationship itself participate in another relationship." },
-  { q: "Why can an identifying relationship between owner and weak entity not be N:M?", options: ["It can be N:M if both sides agree", "Because each weak instance must belong to exactly ONE owner for the composite key to identify it", "Because N:M relationships are always invalid in ER modeling", "Because weak entities cannot have relationships"], correct: 1, explain: "Identification requires the partial key to be scoped to a single owner. Under N:M a weak instance could relate to several owners, so (Owner PK + Partial Key) could no longer uniquely identify it - identifying relationships are always 1:N (or 1:1) from owner to weak entity." }
-];
-
-/* ============================= RULE-BASED TUTOR ============================= */
-
-function tutorAnswer(query, ctx) {
-  const q = query.toLowerCase().replace(/[’‘]/g, "'").trim();
-  const has = (...words) => words.some(w => q.includes(w));
-  const anyRe = (...patterns) => patterns.some(re => re.test(q));
-
-  // HIGHEST PRIORITY: Owner Primary Key intent — must never fall through to
-  // the generic Partial Key answer. Matches many phrasings of the same question.
-  const ownerPkPatterns = [
-    /why (do|would|does|did) (i|we|you) need (the )?owner'?s?\s*(primary key|pk)/,
-    /why (is|does|would) (the )?owner'?s?\s*(primary key|pk) (be )?(required|needed|necessary)/,
-    /why does (a |the )?weak entity need (the )?owner'?s?\s*(primary key|pk)/,
-    /how does (the )?owner'?s?\s*(primary key|pk) identify (a |the )?weak entity/,
-    /(what('s| is) the (role|purpose) of )?(the )?owner'?s?\s*(primary key|pk)/,
-    /owner'?s?\s*(primary key|pk)/
-  ];
-  if (anyRe(...ownerPkPatterns)) {
-    return "A weak entity has no primary key of its own, so it is identified using a **composite key**: the **owner entity's primary key** combined with the weak entity's own **partial key** (discriminator). The owner PK anchors *which* owner the row belongs to, and the partial key distinguishes rows *within* that owner. Drop the owner PK and the weak entity's identifying key becomes incomplete — its rows can no longer be uniquely identified.";
-  }
-
-  // Weak Entity vs Aggregation comparison — check before the standalone
-  // "weak entity" and "aggregation" intents so it isn't shadowed.
-  if ((has("weak entity") && has("aggregation")) && has("vs", "difference", "compare", "versus")) {
-    return "**Weak Entity vs Aggregation:**\n• Weak Entity → one entity depends on another for *identification* (needs owner PK + partial key).\n• Aggregation → an entire *relationship* (with its two entities) is abstracted into a higher-level entity so it can participate in further relationships.\nThey solve different modeling problems: identification vs. relating a relationship to something else.";
-  }
-
-  if (has("partial key", "discriminator")) {
-    return "A **Partial Key** (discriminator) is an attribute of the weak entity that distinguishes its instances *within the scope of one owner*. It is NOT unique across the whole table — only combined with the owner's primary key does it become unique. In ER diagrams it's shown with a dashed underline.";
-  }
-
-  if (anyRe(/total participation/, /must (every|each) .* relate/) || (has("total") && has("participation"))) {
-    return "**Total participation** means every instance of the weak entity MUST relate to exactly one owner instance — shown as a double line from the weak entity to the identifying relationship diamond. This is mandatory for weak entities because they cannot exist without their owner (existence dependency).";
-  }
-
-  if (anyRe(/identifying relationship/)) {
-    return "The **Identifying Relationship** connects a weak entity to its owner and is what makes identification possible. It's drawn as a double-diamond and the weak entity must have Total participation in it.";
-  }
-
-  if (has("strong entity", "regular entity")) {
-    return "A **Strong Entity** has its own primary key and can be uniquely identified independent of any other entity. It's drawn as a single rectangle, e.g. Employee(Emp_ID).";
-  }
-
-  if (has("weak entity")) {
-    return "A **Weak Entity** cannot be uniquely identified by its own attributes alone. It depends on a related **Strong (owner) Entity** for identification, using the owner's primary key + its own partial key. Drawn as a double-outlined rectangle, connected via an identifying relationship (double diamond) with Total participation.";
-  }
-
-  if (has("aggregation")) {
-    return "**Aggregation** lets you treat a Relationship Set (with its participating entities) as if it were a single higher-level Entity, so it can take part in another relationship. Classic example: Employee–Works_On–Project is aggregated so the whole assignment can be Supervised by a Manager.";
-  }
-
-  if (has("error", "invalid", "why did it fail", "validation failed") && ctx && ctx.errors && ctx.errors.length) {
-    return "Here's why your last simulation failed:\n" + ctx.errors.map(e => `• ${e.msg} — ${e.why}`).join("\n");
-  }
-
-  if (has("cardinality")) {
-    return "Cardinality (e.g. 1:N) describes how many instances of one entity can relate to instances of another. For a weak entity, it's typically 1:N from Owner to Weak Entity — one owner can have many weak-entity instances.";
-  }
-
-  if (has("example")) {
-    return "Try loading a Practice example (Practice tab) such as Employee–Dependent (weak entity) or Employee–Works_On–Project→Manager (aggregation) directly into the Simulator to see it built step by step.";
-  }
-
-  return "I can explain: Strong Entity, Weak Entity, Owner Primary Key, Partial Key, Identifying Relationship, Total Participation, Aggregation, or Weak Entity vs Aggregation — or why your last simulation passed/failed validation. Try asking about one of these, or click a suggestion below.";
-}
-
-const TUTOR_SUGGESTIONS = [
-  "What is a partial key?", "Explain total participation", "Weak entity vs aggregation?", "What is aggregation?", "Why do I need the owner's primary key?"
-];
 
 /* ============================= ER SVG PRIMITIVES ============================= */
 
@@ -278,7 +148,7 @@ function Edge({ x1, y1, x2, y2, total, label, color }) {
   const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
   return (
     <g>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={c} strokeWidth={total ? 3 : 1.6} className={total ? "" : ""} />
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={c} strokeWidth={total ? 3 : 1.6} />
       {total && <line x1={x1} y1={y1 - 3} x2={x2} y2={y2 - 3} stroke={c} strokeWidth="1.6" opacity="0.55" />}
       {label && <text x={mx} y={my - 8} textAnchor="middle" fontSize="10" fontWeight="700" fill={c}>{label}</text>}
     </g>
@@ -298,7 +168,7 @@ const WEAK_STEPS = [
   { key: "final", title: "Final ER Diagram", desc: (f) => `Final diagram: ${f.owner || "Owner"} —(${f.cardinality || "1:N"})— ${f.relationship || "Relationship"} —(Total)— ${f.weak || "Weak Entity"}. The model is valid and complete.` },
 ];
 
-function WeakEntityDiagram({ f, step, attrs }) {
+function WeakEntityDiagram({ f, step }) {
   const ownerAttrs = (f.ownerAttrs || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 3);
   const weakAttrs = (f.weakAttrs || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 3);
   const ownerX = 120, ownerY = 200, relX = 340, relY = 200, weakX = 560, weakY = 200;
@@ -425,18 +295,17 @@ function AggregationDiagram({ f, step }) {
 }
 
 function renderExplain(text) {
-  // simple markdown-ish bold parser
   const parts = String(text).split(/\*\*(.*?)\*\*/g);
   return parts.map((p, i) => i % 2 === 1 ? <b key={i} style={{ color: "var(--primary)" }}>{p}</b> : <Fragment key={i}>{p}</Fragment>);
 }
 
 /* ============================= TOP BAR ============================= */
 
-function TopBar({ page, setPage, theme, setTheme }) {
-const items = [
-  ["home", "🏠 Home"], ["simulator", "🧩 Simulator"], ["practice", "📝 Practice"],
-  ["challenge", "🎯 Challenge"], ["tutor", "🤖 AI Tutor"], ["help", "❓ Help"], ["download", "📄 Download"], ["team", "👥 Developed By"]
-];
+function TopBar({ page, setPage, theme, setTheme, user, onSignOut }) {
+  const items = [
+    ["home", "🏠 Home"], ["simulator", "🧩 Simulator"], ["practice", "📝 Practice"],
+    ["tutor", "🤖 AI Tutor"], ["help", "❓ Help"], ["download", "📄 Download"], ["team", "👥 Developed By"]
+  ];
   return (
     <div className="topbar">
       <div className="topbar-inner">
@@ -452,9 +321,18 @@ const items = [
           ))}
           <button className={"learn" + (page === "learn" ? " active" : "")} onClick={() => setPage("learn")}>📘 Learn</button>
         </div>
-        <button className="themebtn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-          {theme === "dark" ? "☀️ Day Mode" : "🌙 Night Mode"}
-        </button>
+        <div className="topbar-right">
+          <button className="themebtn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            {theme === "dark" ? "☀️ Day Mode" : "🌙 Night Mode"}
+          </button>
+          {user && (
+            <span className="userchip">
+              <span className="userchip-name">{user.guest ? "👤 Guest" : "👤 " + user.name}</span>
+
+              <button className="signout" onClick={onSignOut}>Sign out</button>
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -462,12 +340,12 @@ const items = [
 
 /* ============================= HOME ============================= */
 
-function Home({ setPage, progress }) {
+function Home({ setPage, progress, user, avgPct, quizAttempts }) {
   return (
     <div>
       <div className="hero">
         <div>
-          <span className="eyebrow">Interactive DBMS Virtual Laboratory</span>
+          <span className="eyebrow">{user && !user.guest ? "Welcome back, " + user.name + " — " : ""}Interactive DBMS Virtual Laboratory</span>
           <h1>Weak Entity & <span>Aggregation</span> Simulator</h1>
           <p>An interactive ER-modeling lab where you input entities and relationships, the system validates conceptual correctness, then <b>simulates and animates</b> the exact construction of the ER diagram — step by step, exactly like a database designer would reason through it.</p>
           <div className="cta-row">
@@ -485,7 +363,7 @@ function Home({ setPage, progress }) {
             <line x1="55" y1="61" x2="55" y2="80" stroke="var(--key)" strokeWidth="1.5" />
             <polygon points="145,80 175,100 145,120 115,100" fill="none" stroke="var(--rel)" strokeWidth="2" />
             <text x="145" y="103" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="var(--text)">Has</text>
-            <line x1="95" y1="100" x2="115" y2="100" stroke="var(--muted)" strokeWidth="2" className="pulse-line" />
+            <line x1="95" y1="100" x2="115" y2="100" stroke="var(--muted)" strokeWidth="2" />
             <rect x="195" y="80" width="90" height="40" rx="5" fill="none" stroke="var(--weak)" strokeWidth="2" />
             <rect x="200" y="85" width="80" height="30" rx="3" fill="none" stroke="var(--weak)" strokeWidth="1.3" />
             <text x="240" y="104" textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--text)">Dependent</text>
@@ -503,7 +381,7 @@ function Home({ setPage, progress }) {
       <div className="stats-row">
         <div className="stat-card"><b>{progress.simCount}</b><span>Simulations Run</span></div>
         <div className="stat-card"><b>{progress.validCount}</b><span>Valid Models Built</span></div>
-        <div className="stat-card"><b>{progress.quizBest}%</b><span>Best Quiz Score</span></div>
+        <div className="stat-card"><b>{quizAttempts ? avgPct + "%" : "—"}</b><span>Average Quiz Score{quizAttempts ? " · " + quizAttempts + " answered" : ""}</span></div>
         <div className="stat-card"><b>{progress.achievements.length}</b><span>Achievements Unlocked</span></div>
       </div>
 
@@ -606,26 +484,25 @@ function Learn() {
       <div className="section-title"><div className="bar"></div><h2>References & Resources</h2></div>
       <div className="concept-card">
         <ul className="ref-list">
-          <li>📘 Silberschatz, A., Korth, H. F., & Sudarshan, S. — <i>Database System Concepts</i>, 7th Edition, McGraw-Hill — Chapter on Entity-Relationship Model (Weak Entity Sets, Aggregation).</li>
-          <li>📘 Elmasri, R., & Navathe, S. B. — <i>Fundamentals of Database Systems</i>, 7th Edition, Pearson — ER Modeling chapters.</li>
-          <li>📘 Ramakrishnan, R., & Gehrke, J. — <i>Database Management Systems</i>, 3rd Edition, McGraw-Hill.</li>
-          <li>🌐 GeeksforGeeks — "Weak Entity Set in DBMS" and "Generalization, Specialization and Aggregation in ER Model" — geeksforgeeks.org</li>
-          <li>🌐 Javatpoint — "DBMS ER Model" tutorial series — javatpoint.com</li>
-          <li>🎓 NPTEL (IIT) — "Database Management System" course lectures on ER Modeling — nptel.ac.in</li>
-          <li>🎥 YouTube educational lecture referenced above for visual explanation of weak entities and aggregation.</li>
+          <li>📘 Silberschatz, A., Korth, H. F., & Sudarshan, S. — <i>Database System Concepts</i>, 7th Edition, McGraw-Hill — Chapter on Entity-Relationship Model (Weak Entity Sets, Aggregation). <a className="ref-link" href="https://www.db-book.com/" target="_blank" rel="noreferrer">db-book.com ↗</a></li>
+          <li>📘 Elmasri, R., & Navathe, S. B. — <i>Fundamentals of Database Systems</i>, 7th Edition, Pearson — ER Modeling chapters. <a className="ref-link" href="https://www.pearson.com/en-us/subject-catalog/p/fundamentals-of-database-systems/P200000003545/" target="_blank" rel="noreferrer">pearson.com ↗</a></li>
+          <li>📘 Ramakrishnan, R., & Gehrke, J. — <i>Database Management Systems</i>, 3rd Edition, McGraw-Hill. <a className="ref-link" href="https://pages.cs.wisc.edu/~dbbook/" target="_blank" rel="noreferrer">pages.cs.wisc.edu ↗</a></li>
+          <li>🌐 GeeksforGeeks — <a className="ref-link" href="https://www.geeksforgeeks.org/dbms/weak-entity-set-in-dbms/" target="_blank" rel="noreferrer">"Weak Entity Set in DBMS" ↗</a> and <a className="ref-link" href="https://www.geeksforgeeks.org/dbms/generalization-specialization-and-aggregation-in-er-model/" target="_blank" rel="noreferrer">"Generalization, Specialization and Aggregation in ER Model" ↗</a></li>
+          <li>🌐 Javatpoint — <a className="ref-link" href="https://www.javatpoint.com/dbms-tutorial" target="_blank" rel="noreferrer">"DBMS ER Model" tutorial series ↗</a></li>
+          <li>🎓 NPTEL (IIT) — <a className="ref-link" href="https://nptel.ac.in/courses/106105175" target="_blank" rel="noreferrer">"Database Management System" course lectures on ER Modeling ↗</a></li>
+          <li>🎥 <a className="ref-link" href={`https://www.youtube.com/watch?v=${LEARN_VIDEO_ID}`} target="_blank" rel="noreferrer">YouTube educational lecture ↗</a> referenced above for visual explanation of weak entities and aggregation.</li>
         </ul>
       </div>
     </div>
   );
 }
-
 /* ============================= SIMULATOR ============================= */
 
 const WEAK_FIELDS_EMPTY = { owner: "", ownerPK: "", ownerAttrs: "", weak: "", partialKey: "", weakAttrs: "", relationship: "", cardinality: "1:N", participation: "Total" };
 const AGG_FIELDS_EMPTY = { entity1: "", entity2: "", relationship: "", relAttrs: "", higherEntity: "", higherRelationship: "" };
 
 function Simulator({ mode, setMode, weakForm, setWeakForm, aggForm, setAggForm, onRunSim, pendingLoad, setPendingLoad }) {
-  const [result, setResult] = useState(null); // {errors, valid, steps}
+  const [result, setResult] = useState(null); // {errors, valid}
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
   const timerRef = useRef(null);
@@ -825,158 +702,47 @@ function Simulator({ mode, setMode, weakForm, setWeakForm, aggForm, setAggForm, 
   );
 }
 
-/* ============================= PRACTICE + QUIZ ============================= */
-
-function Practice({ onLoad, setPage, progress, setProgress }) {
-  const [tab, setTab] = useState("examples");
-  const [qIdx, setQIdx] = useState(0);
-  const [selected, setSelected] = useState(null);
-  const [score, setScore] = useState(0);
-  const [finished, setFinished] = useState(false);
-
-  function loadExample(ex) {
-    onLoad({ type: ex.type, data: ex.data });
-    setPage("simulator");
-  }
-
-  function answer(i) {
-    if (selected !== null) return;
-    setSelected(i);
-    if (i === QUIZ_QUESTIONS[qIdx].correct) setScore(s => s + 1);
-  }
-  function nextQ() {
-    if (qIdx + 1 >= QUIZ_QUESTIONS.length) {
-      setFinished(true);
-      const pct = Math.round((score + (selected === QUIZ_QUESTIONS[qIdx].correct ? 0 : 0)) / QUIZ_QUESTIONS.length * 100);
-      const finalPct = Math.round((score) / QUIZ_QUESTIONS.length * 100);
-      setProgress(p => ({ ...p, quizBest: Math.max(p.quizBest, finalPct), achievements: p.achievements.includes("Concept Explorer") ? p.achievements : [...p.achievements, "Concept Explorer"] }));
-    } else {
-      setQIdx(q => q + 1); setSelected(null);
-    }
-  }
-  function restartQuiz() { setQIdx(0); setSelected(null); setScore(0); setFinished(false); }
-
-  return (
-    <div>
-      <div className="sim-tabs">
-        <button className={tab === "examples" ? "active" : ""} onClick={() => setTab("examples")}>📚 Practice Examples</button>
-        <button className={tab === "quiz" ? "active" : ""} onClick={() => setTab("quiz")}>🧪 Quiz</button>
-      </div>
-
-      {tab === "examples" && (
-        <div>
-          <div className="section-title"><div className="bar"></div><h2>Valid & Invalid Examples</h2></div>
-          {PRACTICE_EXAMPLES.map(ex => (
-            <div className="ex-card" key={ex.id}>
-              <div className="hd">
-                <h4>{ex.title}</h4>
-                <span className={"status-badge " + (ex.valid ? "ok" : "err")}>{ex.valid ? "✔ Valid Case" : "✖ Invalid Case"}</span>
-              </div>
-              <p>{ex.desc}</p>
-              <button className="btn btn-outline small" onClick={() => loadExample(ex)}>Load into Simulator →</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === "quiz" && (
-        <div className="quiz-card">
-          {!finished ? (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                <span className="status-badge idle">Question {qIdx + 1} / {QUIZ_QUESTIONS.length}</span>
-                <span className="status-badge ok">Score: {score}</span>
-              </div>
-              <h3 style={{ marginTop: 0 }}>{QUIZ_QUESTIONS[qIdx].q}</h3>
-              {QUIZ_QUESTIONS[qIdx].options.map((o, i) => {
-                let cls = "opt";
-                if (selected !== null) {
-                  if (i === QUIZ_QUESTIONS[qIdx].correct) cls += " correct";
-                  else if (i === selected) cls += " wrong";
-                }
-                return <button key={i} className={cls} disabled={selected !== null} onClick={() => answer(i)}>{o}</button>;
-              })}
-              {selected !== null && (
-                <>
-                  <div className="callout">{QUIZ_QUESTIONS[qIdx].explain}</div>
-                  <button className="btn btn-primary small" style={{ marginTop: 12 }} onClick={nextQ}>{qIdx + 1 >= QUIZ_QUESTIONS.length ? "Finish Quiz" : "Next Question →"}</button>
-                </>
-              )}
-            </>
-          ) : (
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 40 }}>🏆</div>
-              <h2>Quiz Complete!</h2>
-              <p>You scored <b>{score} / {QUIZ_QUESTIONS.length}</b> ({Math.round(score / QUIZ_QUESTIONS.length * 100)}%)</p>
-              <button className="btn btn-primary small" onClick={restartQuiz}>Retake Quiz</button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ============================= AI TUTOR ============================= */
-
-function Tutor({ lastResult }) {
-  const [msgs, setMsgs] = useState([{ from: "bot", text: "Hi! I'm your rule-based DBMS Tutor for this simulator. Ask me about weak entities, partial keys, total participation, aggregation, or why your last simulation failed." }]);
-  const [input, setInput] = useState("");
-  const endRef = useRef(null);
-  useEffect(() => { endRef.current && endRef.current.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
-
-  function send(text) {
-    const t = (text !== undefined ? text : input).trim();
-    if (!t) return;
-    const reply = tutorAnswer(t, lastResult);
-    setMsgs(m => [...m, { from: "user", text: t }, { from: "bot", text: reply }]);
-    setInput("");
-  }
-
-  return (
-    <div>
-      <div className="section-title"><div className="bar"></div><h2>🤖 AI-Style DBMS Tutor</h2></div>
-      <p style={{ color: "var(--muted)", maxWidth: 700, fontSize: 13.5 }}>This tutor currently runs on a local rule-based knowledge engine (no external AI API is configured). It is structured so a real AI API could be plugged in later without exposing any keys in the frontend.</p>
-      <div className="tutor-wrap">
-        <div className="tutor-msgs">
-          {msgs.map((m, i) => <div key={i} className={"msg " + m.from}>{renderExplain(m.text)}</div>)}
-          <div ref={endRef}></div>
-        </div>
-        <div className="suggest-row">
-          {TUTOR_SUGGESTIONS.map((s, i) => <span key={i} className="chip" style={{ cursor: "pointer" }} onClick={() => send(s)}>{s}</span>)}
-          {lastResult && lastResult.errors && lastResult.errors.length > 0 && <span className="chip" style={{ cursor: "pointer" }} onClick={() => send("why did my last simulation fail?")}>Why did my last run fail?</span>}
-        </div>
-        <div className="tutor-input">
-          <input value={input} placeholder="Ask about weak entities, keys, participation, aggregation..." onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} />
-          <button className="btn btn-primary small" onClick={() => send()}>Send</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ============================= HELP ============================= */
 
 function Help({ onRestartTour }) {
   const steps = [
+    ["Create an account & sign in", "On the sign-in page, create a free account (name + password) or continue as guest. Everything you do — simulations, quiz scores, exam marks, achievements — is saved under YOUR profile and restored the moment you sign back in. The top bar always shows who is signed in."],
     ["Open the Simulator", "Go to the Simulator tab and choose Weak Entity or Aggregation mode using the tab switch at the top."],
     ["Fill in the inputs", "Enter entity names, keys, attributes and relationship names in the left Input panel. Required fields are marked with *."],
-    ["Use a sample if unsure", "Click 'Load Sample' to auto-fill a working example, or go to Practice to load curated valid/invalid cases."],
-    ["Click Validate & Simulate", "The system checks conceptual rules (required fields, owner PK, partial key, total participation, connected relationship)."],
+    ["Use a sample if unsure", "Click 'Load Sample' to auto-fill a working example, or open Practice → Examples to load curated valid/invalid cases."],
+    ["Click Validate & Simulate", "The system checks conceptual rules (required fields, owner PK, partial key, total participation, N:M ban, name collisions)."],
     ["Read errors if invalid", "Each error explains WHY it is invalid, not just what is missing — fix the field and re-run."],
     ["Watch the diagram build", "If valid, use Play/Pause/Next/Previous/Restart or click any timeline step to move through the 8-step ER construction."],
-    ["Read the explanation panel", "The right panel explains, in plain language, what each construction step means conceptually."],
-    ["Download your report", "Go to Download to generate a full execution report of your inputs, validation and results, then Print/Save as PDF."]
+    ["Study the SQL mapping", "After a valid run, the SQL Mapping Preview shows the exact relational schema (CREATE TABLE + sample INSERTs) your design maps to."],
+    ["Practice & test yourself", "In Practice: take a configurable Quiz (pick difficulty — questions come ONLY from that level — and type how many questions you want), browse the competitive Exam Bank with solutions, try scenario Challenges, or drill with AI Practice."],
+    ["Ask the AI Tutor", "Type any ER/DBMS question in your own words — the tutor answers from a structured knowledge base and suggests related topics."],
+    ["Download your report", "Go to Download to export a full execution report (PDF, Word, PNG diagram, .txt or .json) of any past simulation."]
+  ];
+  const btnRef = [
+    ["🌐 Top bar", "🏠🧩📝🤖❓📄👥 tabs", "Navigate between Home, Simulator, Practice, AI Tutor, Help, Download and Developed By. 📘 Learn sits at the top-right, and 🌙/☀️ toggles Day/Night mode."],
+
+    ["🧩 Simulator", "▶ Validate & Simulate", "Runs conceptual validation on your inputs; if valid, unlocks the animated 8-step ER construction and the SQL Mapping Preview."],
+    ["🧩 Simulator", "✨ Load Sample / ♻️ Reset", "Load Sample fills a known-good example; Reset clears all fields of the current simulator."],
+    ["🧩 Simulator", "⏮ ▶/⏸ ⏭ ⟲", "Diagram playback: previous step, auto-play/pause, next step, restart animation. You can also click any numbered timeline step."],
+    ["🗃️ SQL panel", "CREATE TABLE / INSERTs / Why?", "Tabs of the SQL Mapping Preview; ⧉ Copy copies the shown SQL to the clipboard."],
+    ["📝 Practice · Quiz", "Difficulty + count → Start Quiz", "Pick Easy/Medium/Hard/Any and type how many questions (1–40). Questions come ONLY from the chosen difficulty, and nothing from your last 5 sessions repeats."],
+    ["📝 Practice · Quiz", "Answer options", "1st wrong answer → a nudge + hint (try again). 2nd wrong → full explanation, try again. 3rd wrong → the answer is revealed. Correct anytime → 🎉 congrats + explanation. Points: 1 / 0.5 / 0.25 by attempt."],
+    ["📝 Practice · Exam Bank", "👁 View Solution", "Toggles the worked answer for a competitive-exam question (source paper shown on every card). Filters let you focus on Hard questions."],
+    ["📝 Practice · Challenge", "✔ Check My Model / 👁 Reveal / ⟲ New", "Scores your model field-by-field against the scenario, reveals the reference answer, or generates a fresh real-world case. 🧩 loads the reference into the Simulator."],
+    ["🤖 AI Practice", "New Drill / options", "Generates endless fresh drills (MCQ, spot-the-error, fill-the-key) with instant coaching and streaks."],
+    ["🤖 AI Tutor", "Send / chips", "Ask any ER/DBMS question in free text; tap a chip to jump to a related topic or a suggested question."],
+    ["📄 Download", "PDF / Word / PNG / Print / .txt / .json", "Export the complete execution report — inputs → validation → processing steps → SQL mapping → ER diagram figure."],
+    ["❓ Help", "▶ Restart Guided Tour", "Replays the first-visit walkthrough overlay."]
   ];
   return (
     <div>
       <div className="section-title"><div className="bar"></div><h2>❓ Help & User Manual</h2></div>
       <div className="concept-card">
         <h3>What this app does</h3>
-        <p style={{ fontSize: 13.5, color: "var(--text)" }}>This is a DBMS Virtual Lab that simulates two ER modeling concepts — <b>Weak Entities</b> and <b>Aggregation</b>. You provide conceptual inputs (entities, keys, relationships), the app validates them against real ER modeling rules, and if valid, animates the construction of the diagram step by step with plain-language explanations.</p>
+        <p style={{ fontSize: 13.5, color: "var(--text)" }}>This is a DBMS Virtual Lab that simulates two ER modeling concepts — <b>Weak Entities</b> and <b>Aggregation</b>. You provide conceptual inputs (entities, keys, relationships), the app validates them against real ER modeling rules, and if valid, animates the construction of the diagram step by step with plain-language explanations. A Practice hub (configurable quiz, competitive exam bank, scenario challenges, AI drills), a free-text AI Tutor, per-user accounts with saved progress, and multi-format report downloads complete the lab.</p>
       </div>
       <div className="concept-card" style={{ marginTop: 14 }}>
-        <h3>🚶 First-Time User Walkthrough</h3>
+        <h3>🚶 Step-by-Step User Manual</h3>
         {onRestartTour && (
           <button className="btn btn-outline" style={{ marginTop: 8 }} onClick={onRestartTour}>
             ▶ Restart Guided Tour
@@ -993,19 +759,31 @@ function Help({ onRestartTour }) {
       </div>
       <div className="concept-card" style={{ marginTop: 14 }}>
         <h3>🎛️ Button Reference</h3>
-        <p style={{ fontSize: 13.5 }}><b>Validate & Simulate</b> — runs conceptual validation and starts the diagram build.<br/>
-        <b>▶ Play / ⏸ Pause</b> — auto-advances through construction steps.<br/>
-        <b>⏮ Previous / ⏭ Next</b> — manually step through construction.<br/>
-        <b>⟲ Restart</b> — resets the animation to step 1 without clearing inputs.<br/>
-        <b>Load Sample</b> — fills in a known-good example.<br/>
-        <b>Reset</b> — clears all input fields.<br/>
-        <b>CREATE TABLE / Sample INSERTs / Why this mapping?</b> — tabs of the SQL Mapping Preview shown after a valid run; <b>⧉ Copy</b> copies the SQL to the clipboard.<br/>
-        <b>✔ Check My Model</b> (Challenge tab) — scores your model field-by-field against the scenario; <b>👁 Reveal Answer</b> shows the reference; <b>⟲ New Scenario</b> generates another real-world case; <b>🧩 Load reference answer into Simulator</b> prefills the Simulator with the correct model.<br/>
-        <b>📄 Download as PDF / 📝 Word / 🖼️ PNG</b> — export the full execution report (inputs → validation → steps → SQL mapping → ER diagram figure) as a real generated PDF, a Word document, or the diagram as an image. <b>.txt / .json</b> remain for raw data.</p>
+        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>Every control in the app, where to find it, and exactly what it does.</p>
+        <div style={{ overflowX: "auto" }}>
+          <table className="btnref" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--muted)", borderBottom: "2px solid var(--border)" }}>
+                <th style={{ padding: "8px 8px", whiteSpace: "nowrap" }}>Where</th>
+                <th style={{ padding: "8px 8px", whiteSpace: "nowrap" }}>Button / Control</th>
+                <th style={{ padding: "8px 8px" }}>What it does</th>
+              </tr>
+            </thead>
+            <tbody>
+              {btnRef.map((r, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td style={{ padding: "8px", whiteSpace: "nowrap", fontWeight: 700, color: "var(--primary)", fontSize: 12 }}>{r[0]}</td>
+                  <td style={{ padding: "8px", whiteSpace: "nowrap", fontWeight: 700 }}>{r[1]}</td>
+                  <td style={{ padding: "8px", color: "var(--text)", lineHeight: 1.55 }}>{r[2]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
       <div className="concept-card" style={{ marginTop: 14 }}>
         <h3>🧪 Test Cases Executed on This Build</h3>
-        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>These conceptual test cases were run against the live validation logic during development. You can reproduce any of them yourself: open the Simulator and enter the inputs described, or load the matching case from Practice.</p>
+        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "0 0 10px" }}>These conceptual test cases were run against the live logic during development. You can reproduce any of them yourself.</p>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
             <thead>
@@ -1018,18 +796,25 @@ function Help({ onRestartTour }) {
                 ["TC01", "Valid Employee–Dependent", "Owner=Employee/Emp_ID, Weak=Dependent/Dependent_Name, Total participation", "Diagram builds, 8/8 steps", "✔ Pass"],
                 ["TC02", "Missing Partial Key", "Weak entity given, partial key left blank", "Blocked with 'Partial Key required' error", "✔ Pass"],
                 ["TC03", "Missing Owner Primary Key", "Owner given, ownerPK left blank", "Blocked with 'Owner Primary Key required' error", "✔ Pass"],
-                ["TC04", "Valid Aggregation", "Employee–Works_On–Project → Assignment → Manager", "Diagram builds, 8/8 steps", "✔ Pass"],
+                ["TC04", "Valid Aggregation", "Employee–Works_On–Project → Supervises → Manager", "Diagram builds, 8/8 steps", "✔ Pass"],
                 ["TC05", "Missing Relationship", "Entity1/Entity2 given, relationship left blank", "Blocked with 'Relationship required' error", "✔ Pass"],
                 ["TC06", "Partial Participation (invalid)", "Weak entity valid otherwise, participation=Partial", "Blocked — Total participation required", "✔ Pass"],
                 ["TC07", "Empty form submit", "All fields blank, both simulators", "All required-field errors listed at once", "✔ Pass"],
                 ["TC08", "Reset & re-run", "Fill form → Reset → verify fields clear → re-fill", "Fields clear fully, re-run works normally", "✔ Pass"],
-                ["TC09", "SQL Preview — weak", "Valid weak model → SQL Mapping Preview appears", "Composite PK (OwnerPK, PartialKey) + ON DELETE CASCADE shown; Copy works", "✔ Pass"],
-                ["TC10", "SQL Preview — aggregation", "Valid aggregation → SQL Mapping Preview appears", "Assignment table + composite FK to the aggregated pair shown", "✔ Pass"],
+                ["TC09", "SQL Preview — weak", "Valid weak model → SQL Mapping Preview", "Composite PK (OwnerPK, PartialKey) + ON DELETE CASCADE shown; Copy works", "✔ Pass"],
+                ["TC10", "SQL Preview — aggregation", "Valid aggregation → SQL Mapping Preview", "Assignment table + composite FK to the aggregated pair shown", "✔ Pass"],
                 ["TC11", "PDF report — valid run", "Run valid sim → Download as PDF", "PDF contains inputs, validation, all steps, SQL mapping and ER figure", "✔ Pass"],
                 ["TC12", "PDF report — invalid run", "Run invalid sim → Download as PDF", "PDF lists every validation error with its reason; no diagram appendix", "✔ Pass"],
                 ["TC13", "Word + PNG export", "Download .doc and diagram PNG after a valid run", "Files open in Word / image viewer with a readable light-theme figure", "✔ Pass"],
                 ["TC14", "Challenge scoring", "Answer a scenario with exactly one wrong field", "Score reflects the mistake; mismatch explained with the expected role", "✔ Pass"],
                 ["TC15", "Challenge → Simulator", "Load reference answer into Simulator", "Simulator prefills the reference model; Validate & Simulate builds it", "✔ Pass"],
+                ["TC16", "Quiz hint ladder", "Answer the same question wrong 1×, 2×, 3×", "Hint → explanation+retry → answer revealed; correct gives 🎉 + explanation; points 1/0.5/0.25", "✔ Pass"],
+                ["TC17", "Strict quiz difficulty", "Choose Hard + count 5", "All 5 questions are difficulty=Hard only; count is capped by the available pool", "✔ Pass"],
+                ["TC18", "Quiz no-repeat memory", "Take 5+ sessions back to back", "No question from the previous 5 sessions reappears (unless the level pool is exhausted)", "✔ Pass"],
+                ["TC19", "Exam Bank solutions", "Open Exam Bank, toggle View Solution", "Answer + reasoning shown per card; source paper (GATE/UGC-NET/ISRO + year) labelled", "✔ Pass"],
+                ["TC20", "Account persistence", "Run sim + quiz → Sign out → Sign in", "History, average quiz score, achievements and in-progress forms all restored", "✔ Pass"],
+                ["TC21", "Tutor free-text Q&A", "Ask 'if I create a customer entity in a bank scenario, would a bank_loan be a weak entity?'", "Applied answer: Loan depends on Customer for identification → yes, weak — with the 3-question test", "✔ Pass"],
+                ["TC22", "N:M identifying relationship", "Force cardinality=N:M via console", "Rejected with the structural explanation; option disabled in the dropdown", "✔ Pass"]
               ].map((r, i) => (
                 <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                   {r.map((c, j) => <td key={j} style={{ padding: "8px 6px", color: j === 4 ? "var(--accent)" : "var(--text)", fontWeight: j === 4 ? 700 : 400 }}>{c}</td>)}
@@ -1044,14 +829,6 @@ function Help({ onRestartTour }) {
 }
 
 /* ============================= DOWNLOAD / REPORT ============================= */
-
-const FIELD_LABELS = {
-  owner: "Owner / Strong Entity", ownerPK: "Owner Primary Key", ownerAttrs: "Owner Attributes",
-  weak: "Weak Entity", partialKey: "Partial Key (Discriminator)", weakAttrs: "Weak Entity Attributes",
-  relationship: "Identifying Relationship / Relationship", cardinality: "Cardinality", participation: "Participation",
-  entity1: "Entity 1", entity2: "Entity 2", relAttrs: "Relationship Attributes",
-  higherEntity: "Higher-Level Entity", higherRelationship: "Higher-Level Relationship"
-};
 
 function Download({ history }) {
   const [selId, setSelId] = useState(null);
@@ -1077,6 +854,12 @@ function Download({ history }) {
     if (h.valid) {
       s += "\n-- SIMULATION / PROCESSING STEPS (intermediate results) --\n";
       steps.forEach((st, i) => { s += `${i + 1}. ${st.title}: ${st.desc(h.form).replace(/\*\*/g, "")}\n`; });
+      const mapping = sqlMappingFor(h.mode, h.form);
+      if (mapping) {
+        s += "\n-- SQL MAPPING (ER → RELATIONAL SCHEMA) --\n";
+        s += mapping.createSql + "\n" + mapping.inserts + "\n";
+        mapping.notes.forEach(n => { s += "  • " + n + "\n"; });
+      }
       s += "\n-- FINAL RESULT --\nA conceptually valid " + (h.mode === "weak" ? "Weak Entity" : "Aggregation") + " ER structure was constructed successfully. See the attached ER diagram figure.\n";
     } else {
       s += "\n-- FINAL RESULT --\nSimulation blocked at validation stage — no ER diagram was generated. Correct the errors above and re-run.\n";
@@ -1257,21 +1040,47 @@ function Team() {
 
 /* ============================= ROOT APP ============================= */
 
-function App() {
-  const [theme, setTheme] = useLocalStorage("wes_theme", "light");
+/* One-time migration: copy pre-accounts global state (wes_history etc.)
+   into the signed-in user's namespace so nobody loses existing work. */
+function migrateLegacyData(uidv) {
+  try {
+    if (localStorage.getItem("wes_legacy_migrated")) return;
+    const map = { history: "wes_history", progress: "wes_progress", weakform: "wes_weakform", aggform: "wes_aggform", mode: "wes_mode" };
+    let touched = false;
+    Object.entries(map).forEach(([nk, ok]) => {
+      const raw = localStorage.getItem(ok);
+      if (raw !== null) {
+        const ownKey = "wes_" + uidv + "_" + nk;
+        if (localStorage.getItem(ownKey) === null) localStorage.setItem(ownKey, raw);
+        touched = true;
+      }
+    });
+    if (touched) localStorage.setItem("wes_legacy_migrated", "1");
+  } catch (e) { /* ignore */ }
+}
+
+function Workspace({ user, theme, setTheme, onSignOut }) {
+  const ns = "wes_" + user.uid + "_";
   const [page, setPage] = useState("home");
-  const [weakForm, setWeakForm] = useLocalStorage("wes_weakform", { ...WEAK_FIELDS_EMPTY });
-  const [aggForm, setAggForm] = useLocalStorage("wes_aggform", { ...AGG_FIELDS_EMPTY });
-  const [mode, setMode] = useLocalStorage("wes_mode", "weak");
-  const [history, setHistory] = useLocalStorage("wes_history", []);
-  const [progress, setProgress] = useLocalStorage("wes_progress", { simCount: 0, validCount: 0, quizBest: 0, achievements: [] });
+  const [weakForm, setWeakForm] = useLocalStorage(ns + "weakform", { ...WEAK_FIELDS_EMPTY });
+  const [aggForm, setAggForm] = useLocalStorage(ns + "aggform", { ...AGG_FIELDS_EMPTY });
+  const [mode, setMode] = useLocalStorage(ns + "mode", "weak");
+  const [history, setHistory] = useLocalStorage(ns + "history", []);
+  const [progress, setProgress] = useLocalStorage(ns + "progress", { simCount: 0, validCount: 0, quizBest: 0, achievements: [] });
+  const [quizStats, setQuizStats] = useLocalStorage(ns + "quizstats", null);
+  const [examStats, setExamStats] = useLocalStorage(ns + "examstats", { marked: {} });
   const [pendingLoad, setPendingLoad] = useState(null);
   const [lastResult, setLastResult] = useState(null);
-  const [tour, setTour] = useLocalStorage("wes_tour_done", false);
+  const [tour, setTour] = useLocalStorage(ns + "tour_done", false);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  /* E) Average quiz score across all answered questions (accuracy). */
+  const qTotals = (quizStats && quizStats.totals) || { seen: 0, correct: 0 };
+  const avgPct = qTotals.seen > 0 ? Math.round((100 * qTotals.correct) / qTotals.seen) : null;
+  const quizAttempts = qTotals.seen;
 
   function onTourEvent(e) {
     if (e && e.type === "goto") setPage(e.page);
@@ -1279,7 +1088,7 @@ function App() {
   }
 
   function onRunSim({ mode, valid, errors, form }) {
-    const entry = { id: uid(), mode, valid, errors, form, time: nowStr() };
+    const entry = { id: newId(), mode, valid, errors, form, time: nowStr() };
     setHistory(h => [entry, ...h].slice(0, 25));
     setLastResult({ valid, errors });
     setProgress(p => {
@@ -1296,17 +1105,19 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar page={page} setPage={setPage} theme={theme} setTheme={setTheme} />
+      <TopBar page={page} setPage={setPage} theme={theme} setTheme={setTheme} user={user} onSignOut={onSignOut} />
       <div className="container">
-        {page === "home" && <Home setPage={setPage} progress={progress} />}
+        {page === "home" && <Home setPage={setPage} progress={progress} user={user} avgPct={avgPct} quizAttempts={quizAttempts} />}
         {page === "learn" && <Learn />}
         {page === "simulator" && (
           <Simulator mode={mode} setMode={setMode} weakForm={weakForm} setWeakForm={setWeakForm}
             aggForm={aggForm} setAggForm={setAggForm} onRunSim={onRunSim}
             pendingLoad={pendingLoad} setPendingLoad={setPendingLoad} />
         )}
-        {page === "practice" && <Practice onLoad={onLoadExample} setPage={setPage} progress={progress} setProgress={setProgress} />}
-        {page === "challenge" && <Challenge setPendingLoad={setPendingLoad} setPage={setPage} setProgress={setProgress} />}
+        {page === "practice" && (
+          <Practice onLoad={onLoadExample} setPage={setPage} progress={progress} setProgress={setProgress}
+            user={user} quizStats={quizStats} setQuizStats={setQuizStats} examStats={examStats} setExamStats={setExamStats} />
+        )}
         {page === "tutor" && <Tutor lastResult={lastResult} />}
         {page === "help" && <Help onRestartTour={() => setTour(false)} />}
         {page === "download" && <Download history={history} />}
@@ -1319,6 +1130,31 @@ function App() {
       </div>
     </div>
   );
+}
+
+function App() {
+  const [user, setUser] = useState(() => {
+    const u = getSession();
+    if (u) migrateLegacyData(u.uid);
+    return u;
+  });
+  const [theme, setTheme] = useLocalStorage("wes_theme", "light");
+
+  function handleAuthed(u) {
+    migrateLegacyData(u.uid);
+    setSession(u);
+    setUser(u);
+  }
+
+  function handleSignOut() {
+    authSignOut();
+    setUser(null);
+  }
+
+  if (!user) return <LoginGate onAuthed={handleAuthed} />;
+  /* key={user.uid} remounts the workspace on account switch, so per-user
+     state is loaded fresh and can never leak between profiles. */
+  return <Workspace key={user.uid} user={user} theme={theme} setTheme={setTheme} onSignOut={handleSignOut} />;
 }
 
 export default App;

@@ -262,3 +262,68 @@ a{color:inherit}
 /* Walkthrough: keep both modes readable */
 [data-theme="dark"] .tour-overlay{background:rgba(0,0,0,.7)}
 [data-theme="dark"] .tour-card{box-shadow:0 24px 60px rgba(0,0,0,.6)}
+
+/* ============================= LOGIN GATE ============================= */
+.login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,var(--bg) 0%,var(--card) 100%)}
+.login-card{width:100%;max-width:430px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:32px 30px;box-shadow:0 24px 60px rgba(0,0,0,.18);animation:fadein .35s ease}
+.login-logo{font-size:40px;text-align:center;margin-bottom:6px}
+.login-card h1{font-size:19px;text-align:center;margin:0 0 6px;color:var(--text)}
+.login-sub{text-align:center;color:var(--muted);font-size:12.5px;margin:0 0 18px;line-height:1.5}
+.login-tabs{display:flex;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:16px}
+.login-tabs button{flex:1;border:none;background:transparent;color:var(--muted);padding:8px;border-radius:7px;font-weight:600;font-size:13px;cursor:pointer}
+.login-tabs button.active{background:var(--primary);color:#fff}
+.login-error{background:rgba(224,90,71,.1);border:1px solid var(--err,#e05a47);color:var(--err,#e05a47);padding:8px 12px;border-radius:8px;font-size:12.5px;margin:8px 0}
+.login-guest{text-align:center;margin-top:14px;color:var(--primary);font-weight:600;font-size:13.5px;cursor:pointer}
+.login-guest:hover{text-decoration:underline}
+.guest-note{color:var(--muted);font-weight:400;font-size:11.5px}
+.login-note{margin-top:14px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.5}
+
+/* ============================= TOPBAR USER CHIP ============================= */
+.topbar-right{display:flex;align-items:center;gap:10px}
+.userchip{display:inline-flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:4px 6px 4px 12px}
+.userchip-name{font-size:12.5px;font-weight:700;color:var(--text);white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.userchip .signout{border:1px solid var(--border);background:transparent;color:var(--muted);border-radius:999px;padding:3px 10px;font-size:11.5px;cursor:pointer}
+.userchip .signout:hover{border-color:var(--primary);color:var(--primary)}
+@media (max-width:860px){.userchip-name{max-width:80px}}
+
+/* ============================= QUIZ RUNNER ============================= */
+.quiz-intro{font-size:13px;color:var(--text);line-height:1.65;margin:0 0 14px}
+.q-meta{display:flex;gap:8px;margin:8px 0 10px}
+.diff-tag{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.diff-tag.d1{color:#12b886;border-color:#12b886}
+.diff-tag.d2{color:#e8a13c;border-color:#e8a13c}
+.diff-tag.d3{color:#e05a47;border-color:#e05a47}
+.diff-tag.topic{color:var(--primary);border-color:var(--primary)}
+.ladder-note{margin-top:12px;padding:12px 14px;border-radius:10px;font-size:13px;line-height:1.6}
+.ladder-note.correct{background:rgba(18,184,134,.1);border:1px solid #12b886;color:var(--text)}
+.ladder-note.nudge{background:rgba(232,161,60,.12);border:1px solid #e8a13c}
+.ladder-note.explain{background:rgba(90,130,255,.12);border:1px solid var(--primary)}
+.ladder-note.revealed{background:rgba(224,90,71,.1);border:1px solid #e05a47}
+.ladder-hint{margin-top:6px;font-size:12.5px;color:var(--text)}
+.ladder-explain{margin-top:6px;font-size:12.5px;color:var(--text)}
+.topic-row{display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px dashed var(--border);font-size:12.5px}
+.topic-row:last-child{border-bottom:none}
+
+/* ============================= EXAM BANK ============================= */
+.exam-card{margin-bottom:12px}
+.exam-src{font-size:11px;font-weight:700;color:var(--primary);background:rgba(90,130,255,.1);padding:2px 8px;border-radius:999px}
+.exam-topic{font-size:11px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:999px}
+.exam-opts{display:grid;gap:6px;margin-bottom:10px}
+.exam-opt{border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12.5px;color:var(--text);background:var(--bg)}
+.exam-opt.correct{border-color:#12b886;background:rgba(18,184,134,.12);font-weight:600}
+.exam-opt.dim{opacity:.55}
+.exam-opt.chosen{border-color:var(--primary)}
+.exam-actions{display:flex;gap:8px;flex-wrap:wrap}
+.exam-solution{margin-top:10px;background:rgba(18,184,134,.08);border:1px dashed #12b886;border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--text);line-height:1.6}
+.chip-on{border-color:var(--primary)!important;color:var(--primary)!important}
+
+/* ============================= AI PRACTICE ============================= */
+.drill-model{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:8px 0 12px}
+.drill-model-row{font-size:12.5px;color:var(--text);padding:3px 0}
+
+/* ============================= BUTTON REFERENCE TABLE + REF LINKS ============================= */
+.btnref th{text-transform:uppercase;font-size:10.5px;letter-spacing:.6px}
+.btnref td{vertical-align:top}
+.btnref tbody tr:hover{background:rgba(99,102,241,.06)}
+.ref-link{color:var(--primary);font-weight:600;text-decoration:none;border-bottom:1px dashed var(--primary);cursor:pointer}
+.ref-link:hover{color:var(--accent);border-bottom-color:var(--accent)}
