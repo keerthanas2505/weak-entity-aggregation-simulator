@@ -644,3 +644,25 @@ export function topicTitle(id) {
   const t = KB.find(x => x.id === id);
   return t ? `${t.icon || "📘"} ${t.title}` : id;
 }
+
+/* ============================================================
+   RETRIEVER for the Groq RAG pipeline (api/tutor.js).
+   Reuses the same scoring engine as answerQuery so the server
+   prompt is always grounded in the exact local knowledge base.
+   Returns the top-k topic entries (strong alias hits first).
+   ============================================================ */
+export function retrieveTopics(query, k = 3) {
+  const rawQ = normalize(query);
+  const tokSet = tokens(query);
+  const scored = KB.map(t => ({ t, ...scoreTopic(t, tokSet, rawQ) })).sort((a, b) => b.s - a.s);
+  const strong = scored.filter(x => x.strong && x.s > 0);
+  const rest = scored.filter(x => !x.strong && x.s >= 6);
+  return [...strong, ...rest].slice(0, k).map(x => ({
+    title: x.t.title,
+    definition: x.t.definition,
+    notation: x.t.notation,
+    why: x.t.why,
+    example: x.t.example,
+    pitfall: x.t.pitfall
+  }));
+}

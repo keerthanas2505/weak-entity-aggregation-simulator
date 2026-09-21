@@ -16,7 +16,7 @@ import { emptyQuizStats, topicBreakdown } from "../lib/quizBank.js";
    Quiz stats persist per user and adapt to prior activity.
    ============================================================ */
 
-export default function Practice({ onLoad, setPage, progress, setProgress, user, quizStats, setQuizStats, examStats, setExamStats }) {
+export default function Practice({ onLoad, setPage, progress, setProgress, user, quizStats, setQuizStats, examStats, setExamStats, aiStats, setAiStats, onAskTutor }) {
   const [tab, setTab] = useState("examples");
 
   function loadExample(ex) {
@@ -65,7 +65,9 @@ export default function Practice({ onLoad, setPage, progress, setProgress, user,
         <Challenge setPendingLoad={onLoad} setPage={setPage} setProgress={setProgress} />
       )}
 
-      {tab === "ai" && <AiPractice />}
+      {tab === "ai" && (
+        <AiPractice aiStats={aiStats} setAiStats={setAiStats} setProgress={setProgress} onAskTutor={onAskTutor} />
+      )}
 
       {tab === "quiz" && assessed.length > 0 && (
         <div className="concept-card" style={{ marginTop: 14 }}>

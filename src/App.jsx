@@ -729,8 +729,8 @@ function Help({ onRestartTour }) {
     ["📝 Practice · Quiz", "Answer options", "1st wrong answer → a nudge + hint (try again). 2nd wrong → full explanation, try again. 3rd wrong → the answer is revealed. Correct anytime → 🎉 congrats + explanation. Points: 1 / 0.5 / 0.25 by attempt."],
     ["📝 Practice · Exam Bank", "👁 View Solution", "Toggles the worked answer for a competitive-exam question (source paper shown on every card). Filters let you focus on Hard questions."],
     ["📝 Practice · Challenge", "✔ Check My Model / 👁 Reveal / ⟲ New", "Scores your model field-by-field against the scenario, reveals the reference answer, or generates a fresh real-world case. 🧩 loads the reference into the Simulator."],
-    ["🤖 AI Practice", "New Drill / options", "Generates endless fresh drills (MCQ, spot-the-error, fill-the-key) with instant coaching and streaks."],
-    ["🤖 AI Tutor", "Send / chips", "Ask any ER/DBMS question in free text; tap a chip to jump to a related topic or a suggested question."],
+    ["🤖 AI Practice", "5 drill kinds + ⏱ Speed Round", "Adaptive drills (MCQ, Spot-the-Error, Fill-the-Key, Weak-or-Strong?, SQL↔ER) weighted to your weak kinds/topics. Wrong answers get a hint ladder (hint → explanation → answer); missed patterns return later as 🔁 Revisit with a fresh scenario. The goal ring tracks 10 drills/day, ⏱ Speed Round gives +1 per correct (wrong = −3s) with a persisted hi-score, and 🤖 Ask the Tutor hands the concept to the AI Tutor."],
+    ["🤖 AI Tutor", "Send / chips", "Ask any ER/DBMS question in free text. Deployed with a GROQ_API_KEY, answers are synthesized by Groq Llama 3.3 from retrieved course-knowledge (RAG); without it, the built-in offline engine answers instantly. Tap a chip to explore a related topic."],
     ["📄 Download", "PDF / Word / PNG / Print / .txt / .json", "Export the complete execution report — inputs → validation → processing steps → SQL mapping → ER diagram figure."],
     ["❓ Help", "▶ Restart Guided Tour", "Replays the first-visit walkthrough overlay."]
   ];
@@ -1069,6 +1069,8 @@ function Workspace({ user, theme, setTheme, onSignOut }) {
   const [progress, setProgress] = useLocalStorage(ns + "progress", { simCount: 0, validCount: 0, quizBest: 0, achievements: [] });
   const [quizStats, setQuizStats] = useLocalStorage(ns + "quizstats", null);
   const [examStats, setExamStats] = useLocalStorage(ns + "examstats", { marked: {} });
+  const [aiStats, setAiStats] = useLocalStorage(ns + "aistats", null);
+  const [tutorSeed, setTutorSeed] = useState(null);
   const [pendingLoad, setPendingLoad] = useState(null);
   const [lastResult, setLastResult] = useState(null);
   const [tour, setTour] = useLocalStorage(ns + "tour_done", false);
@@ -1103,6 +1105,13 @@ function Workspace({ user, theme, setTheme, onSignOut }) {
     setPendingLoad({ type, data });
   }
 
+  /* AI Practice → Tutor bridge: seed the tutor with the drill's
+     concept question and jump to the Tutor page. */
+  function askTutor(question) {
+    setTutorSeed(question);
+    setPage("tutor");
+  }
+
   return (
     <div className="app">
       <TopBar page={page} setPage={setPage} theme={theme} setTheme={setTheme} user={user} onSignOut={onSignOut} />
@@ -1116,9 +1125,10 @@ function Workspace({ user, theme, setTheme, onSignOut }) {
         )}
         {page === "practice" && (
           <Practice onLoad={onLoadExample} setPage={setPage} progress={progress} setProgress={setProgress}
-            user={user} quizStats={quizStats} setQuizStats={setQuizStats} examStats={examStats} setExamStats={setExamStats} />
+            user={user} quizStats={quizStats} setQuizStats={setQuizStats} examStats={examStats} setExamStats={setExamStats}
+            aiStats={aiStats} setAiStats={setAiStats} onAskTutor={askTutor} />
         )}
-        {page === "tutor" && <Tutor lastResult={lastResult} />}
+        {page === "tutor" && <Tutor lastResult={lastResult} seed={tutorSeed} onSeedConsumed={() => setTutorSeed(null)} />}
         {page === "help" && <Help onRestartTour={() => setTour(false)} />}
         {page === "download" && <Download history={history} />}
         {page === "team" && <Team />}

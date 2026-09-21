@@ -327,3 +327,18 @@ a{color:inherit}
 .btnref tbody tr:hover{background:rgba(99,102,241,.06)}
 .ref-link{color:var(--primary);font-weight:600;text-decoration:none;border-bottom:1px dashed var(--primary);cursor:pointer}
 .ref-link:hover{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ============================= AI PRACTICE v2 ============================= */
+.aip-stats{display:flex;gap:12px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.goal-ring{position:relative;width:44px;height:44px;flex:0 0 auto}
+.goal-ring svg{width:44px;height:44px;transform:rotate(-90deg)}
+.goal-ring .ring-bg{fill:none;stroke:var(--border);stroke-width:3.4}
+.goal-ring .ring-fg{fill:none;stroke:var(--primary);stroke-width:3.4;stroke-linecap:round;transition:stroke-dasharray .4s}
+.goal-ring .ring-fg.done{stroke:#12b886}
+.goal-ring .goal-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--text)}
+.speedbar{height:6px;border-radius:4px;background:var(--border);overflow:hidden;margin-bottom:10px}
+.speedbar-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));transition:width 1s linear}
+.aip-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+
+/* ============================= TUTOR MODE BAR ============================= */
+.tutor-modebar{display:flex;gap:8px;align-items:center;padding:0 4px 8px;min-height:26px}
