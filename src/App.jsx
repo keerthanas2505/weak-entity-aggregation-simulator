@@ -1027,12 +1027,11 @@ function Team() {
             )}
             <h4>{m.name}</h4>
             <span>{m.id}</span>
-            {broken[i] && <div style={{ marginTop: 8, fontSize: 11.5, color: "var(--muted)" }}>Photograph to be added</div>}
           </div>
         ))}
       </div>
       <div className="guide-card">
-        <div className="avatar-ph" style={{ width: 70, height: 70, fontSize: 22 }}>S</div>
+        <img className="avatar-img" src="/team/swaminathan.jpg" alt="Dr. Swaminathan A" style={{ width: 70, height: 70 }} />
         <div>
           <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>GUIDED BY</div>
           <h3 style={{ margin: "3px 0" }}>Dr. Swaminathan A</h3>
