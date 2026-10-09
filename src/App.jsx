@@ -1009,20 +1009,25 @@ function Download({ history }) {
 
 function Team() {
   const members = [
-    { name: "S KEERTHANA", id: "25BCE5446" },
-    { name: "ROSHINI G", id: "25BCE1676" },
-    { name: "SALAI JAYAPADHAM S", id: "25BCE5369" }
+    { name: "S KEERTHANA", id: "25BCE5446", photo: "/team/keerthana.jpg" },
+    { name: "ROSHINI G", id: "25BCE1676", photo: "/team/roshini.jpg" },
+    { name: "SALAI JAYAPADHAM S", id: "25BCE5369", photo: "/team/salai.jpg" }
   ];
+  const [broken, setBroken] = useState({});
   return (
     <div>
       <div className="section-title"><div className="bar"></div><h2>👥 Developed By</h2></div>
       <div className="team-grid">
         {members.map((m, i) => (
           <div className="team-card" key={i}>
-            <div className="avatar-ph">{m.name.split(" ")[0][0]}</div>
+            {broken[i] ? (
+              <div className="avatar-ph">{m.name.split(" ")[0][0]}</div>
+            ) : (
+              <img className="avatar-img" src={m.photo} alt={m.name} onError={() => setBroken(b => ({ ...b, [i]: true }))} />
+            )}
             <h4>{m.name}</h4>
             <span>{m.id}</span>
-            <div style={{ marginTop: 8, fontSize: 11.5, color: "var(--muted)" }}>Photograph to be added</div>
+            {broken[i] && <div style={{ marginTop: 8, fontSize: 11.5, color: "var(--muted)" }}>Photograph to be added</div>}
           </div>
         ))}
       </div>
