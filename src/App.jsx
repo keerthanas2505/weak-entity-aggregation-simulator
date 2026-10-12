@@ -9,16 +9,6 @@ import { buildReportSections, exportPDF, exportDocx, exportPNG, captureDiagram, 
 import { WEAK_SAMPLE, AGG_SAMPLE } from './lib/samples.js';
 import { getSession, setSession, signOut as authSignOut } from './lib/auth.js';
 
-/* ============================================================
-   VIDEO CONFIG — swap in YOUR self-made video here (one line).
-   1. Produce your video using video-script.md (repo root).
-   2. Upload to YouTube as Unlisted.
-   3. Replace the ID below with your video's ID (the part after
-      watch?v= in the URL).
-   ============================================================ */
-const LEARN_VIDEO_ID = "QpdhBUYk7Kk"; // ← replace with your own video ID
-const LEARN_VIDEO_CREDIT = "Educational lecture: ER Model — Weak Entities & Aggregation (placeholder until our own video is uploaded).";
-
 /* ============================= UTILITIES ============================= */
 
 function useLocalStorage(key, initial) {
@@ -442,6 +432,44 @@ function Home({ setPage, progress, user, avgPct, quizAttempts }) {
 
 /* ============================= LEARN ============================= */
 
+/* ============================ LEARN VIDEO ============================ */
+const LEARN_VIDEO_SRC = "/video/weak-entity-aggregation.mp4";
+const LEARN_VIDEO_CHAPTERS = [[0, "Hook & title"], [41, "Part 1 intro"], [50, "The problem"], [85, "Strong entities"], [109, "Weak entities"], [147, "Notation"], [180, "ER diagram"], [221, "Identifying key"], [256, "Total participation & cascade"], [289, "Is it really weak?"], [329, "Weak entity in SQL"], [363, "Course & section example"], [408, "Real examples"], [449, "Composite vs surrogate key"], [487, "Common mistakes"], [514, "Part 2 intro"], [523, "The aggregation problem"], [558, "Ternary relationships"], [588, "Aggregation explained"], [626, "Aggregation in SQL"], [661, "Sponsor & monitor example"], [701, "Ternary or aggregation?"], [737, "Comparison"], [759, "Recap"], [784, "Practice questions"], [832, "End card"]];
+const LEARN_VIDEO_RATES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const fmtTime = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+
+function LearnVideo() {
+  const ref = useRef(null);
+  const [rate, setRate] = useState(1);
+  const [now, setNow] = useState(0);
+  const chIndex = LEARN_VIDEO_CHAPTERS.reduce((k, c, i) => (now >= c[0] ? i : k), 0);
+  const changeRate = (r) => { setRate(r); if (ref.current) ref.current.playbackRate = r; };
+  const jump = (t) => { if (ref.current) { ref.current.currentTime = t; ref.current.play().catch(() => {}); } };
+  return (
+    <>
+      <div className="video-wrap">
+        <video ref={ref} src={LEARN_VIDEO_SRC} controls preload="metadata" playsInline
+          title="Weak Entity and Aggregation - whiteboard explainer"
+          onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)}
+          onLoadedMetadata={(e) => { e.currentTarget.playbackRate = rate; }}></video>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 10 }}>
+        <span style={{ color: "var(--muted)", fontSize: 12.5, fontWeight: 700 }}>Speed</span>
+        {LEARN_VIDEO_RATES.map((r) => (
+          <button key={r} type="button" className={"chip" + (rate === r ? " chip-on" : "")} onClick={() => changeRate(r)}>{r}×</button>
+        ))}
+        <label style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 12.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+          Chapter
+          <select value={chIndex} onChange={(e) => jump(LEARN_VIDEO_CHAPTERS[+e.target.value][0])}
+            style={{ background: "var(--card)", color: "var(--text)", border: "1.5px solid var(--border)", borderRadius: 8, padding: "6px 8px", fontSize: 12.5 }}>
+            {LEARN_VIDEO_CHAPTERS.map((c, i) => (<option key={c[0]} value={i}>{fmtTime(c[0])} - {c[1]}</option>))}
+          </select>
+        </label>
+      </div>
+    </>
+  );
+}
+
 function Learn() {
   const concepts = [
     { tag: "strong", title: "Strong Entity", body: "An entity that has its own primary key and can be uniquely identified without relying on any other entity.", ex: "Employee(Emp_ID, Name) — Emp_ID alone identifies every row." },
@@ -476,10 +504,8 @@ function Learn() {
       </div>
 
       <div className="section-title"><div className="bar"></div><h2>Educational Video</h2></div>
-      <div className="video-wrap">
-        <iframe src={`https://www.youtube.com/embed/${LEARN_VIDEO_ID}`} title="Weak Entity and Aggregation - ER Model" allowFullScreen loading="lazy"></iframe>
-      </div>
-      <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>{LEARN_VIDEO_CREDIT} If this video is unavailable in your region, search "ER Model weak entity aggregation" on YouTube for equivalent lectures.</p>
+      <LearnVideo />
+      <p style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 8 }}>Our own whiteboard explainer: weak entities, aggregation, SQL mapping and practice questions, with voiceover. Use the speed buttons or jump to any chapter.</p>
 
       <div className="section-title"><div className="bar"></div><h2>References & Resources</h2></div>
       <div className="concept-card">
@@ -488,9 +514,8 @@ function Learn() {
           <li>📘 Elmasri, R., & Navathe, S. B. — <i>Fundamentals of Database Systems</i>, 7th Edition, Pearson — ER Modeling chapters. <a className="ref-link" href="https://www.pearson.com/en-us/subject-catalog/p/fundamentals-of-database-systems/P200000003545/" target="_blank" rel="noreferrer">pearson.com ↗</a></li>
           <li>📘 Ramakrishnan, R., & Gehrke, J. — <i>Database Management Systems</i>, 3rd Edition, McGraw-Hill. <a className="ref-link" href="https://pages.cs.wisc.edu/~dbbook/" target="_blank" rel="noreferrer">pages.cs.wisc.edu ↗</a></li>
           <li>🌐 GeeksforGeeks — <a className="ref-link" href="https://www.geeksforgeeks.org/dbms/weak-entity-set-in-dbms/" target="_blank" rel="noreferrer">"Weak Entity Set in DBMS" ↗</a> and <a className="ref-link" href="https://www.geeksforgeeks.org/dbms/generalization-specialization-and-aggregation-in-er-model/" target="_blank" rel="noreferrer">"Generalization, Specialization and Aggregation in ER Model" ↗</a></li>
-          <li>🌐 Javatpoint — <a className="ref-link" href="https://www.javatpoint.com/dbms-tutorial" target="_blank" rel="noreferrer">"DBMS ER Model" tutorial series ↗</a></li>
+          <li>🌐 Javatpoint — <a className="ref-link" href="https://www.javatpoint.com/dbms-er-model-concept" target="_blank" rel="noreferrer">"ER Model in DBMS" ↗</a> and <a className="ref-link" href="https://www.javatpoint.com/dbms-aggregation" target="_blank" rel="noreferrer">"DBMS Aggregation" ↗</a></li>
           <li>🎓 NPTEL (IIT) — <a className="ref-link" href="https://nptel.ac.in/courses/106105175" target="_blank" rel="noreferrer">"Database Management System" course lectures on ER Modeling ↗</a></li>
-          <li>🎥 <a className="ref-link" href={`https://www.youtube.com/watch?v=${LEARN_VIDEO_ID}`} target="_blank" rel="noreferrer">YouTube educational lecture ↗</a> referenced above for visual explanation of weak entities and aggregation.</li>
         </ul>
       </div>
     </div>

@@ -113,7 +113,7 @@ a{color:inherit}
 .callout{border-left:4px solid var(--primary);background:rgba(59,91,219,.06);padding:10px 14px;border-radius:8px;font-size:13.5px;margin-top:10px;color:var(--text)}
 .example-box{background:var(--bg);border:1px dashed var(--border);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:13px;color:var(--muted)}
 .video-wrap{position:relative;padding-bottom:56.25%;height:0;border-radius:14px;overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow)}
-.video-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0}
+.video-wrap iframe,.video-wrap video{position:absolute;top:0;left:0;width:100%;height:100%;border:0;background:#fff}
 .ref-list{list-style:none;margin:0;padding:0}
 .ref-list li{padding:10px 0;border-bottom:1px solid var(--border);font-size:13.5px;color:var(--muted);display:flex;gap:8px}
 .ref-list li:last-child{border:none}
