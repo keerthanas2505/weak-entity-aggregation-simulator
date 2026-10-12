@@ -615,7 +615,7 @@ function Learn() {
           <li>📘 Elmasri, R., & Navathe, S. B. — <i>Fundamentals of Database Systems</i>, 7th Edition, Pearson — ER Modeling chapters.</li>
           <li>📘 Ramakrishnan, R., & Gehrke, J. — <i>Database Management Systems</i>, 3rd Edition, McGraw-Hill.</li>
           <li>🌐 GeeksforGeeks — "Weak Entity Set in DBMS" and "Generalization, Specialization and Aggregation in ER Model" — geeksforgeeks.org</li>
-          <li>🌐 Javatpoint — "ER Model in DBMS" and "DBMS Aggregation" — javatpoint.com</li>
+          <li>🌐 Tutorialspoint — "DBMS - ER Model Basic Concepts" and "DBMS - Weak Entity Types" — tutorialspoint.com</li>
           <li>🎓 NPTEL (IIT) — "Database Management System" course lectures on ER Modeling — nptel.ac.in</li>
         </ul>
       </div>
